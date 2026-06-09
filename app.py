@@ -41,8 +41,54 @@ def carregar_modelo():
         raise RuntimeError("Arquivo corrompido.")
     return ort.InferenceSession(MODEL_FILENAME)
 
+def autocrop(img):
+    """
+    Remove bordas pretas/brancas ao redor do RX.
+    Garante que o modelo sempre receba a regiao da mao centralizada,
+    independente de como a imagem foi capturada (print, screenshot, upload).
+    """
+    import numpy as np
+    gray = np.array(img.convert('L')).astype(np.float32)
+    
+    # Detecta se fundo e preto ou branco
+    cantos = [gray[0,0], gray[0,-1], gray[-1,0], gray[-1,-1]]
+    fundo_escuro = sum(c < 128 for c in cantos) >= 3
+    
+    if fundo_escuro:
+        mask = gray > 20  # conteudo = pixels claros em fundo preto
+    else:
+        mask = gray < 235  # conteudo = pixels escuros em fundo branco
+    
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+    
+    if not rows.any() or not cols.any():
+        return img  # nao conseguiu detectar, retorna original
+    
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    
+    # Margem de 3%
+    h, w = gray.shape
+    pad_r = max(8, int((rmax - rmin) * 0.03))
+    pad_c = max(8, int((cmax - cmin) * 0.03))
+    rmin = max(0, rmin - pad_r)
+    rmax = min(h, rmax + pad_r)
+    cmin = max(0, cmin - pad_c)
+    cmax = min(w, cmax + pad_c)
+    
+    cropped = img.crop((cmin, rmin, cmax, rmax))
+    
+    # So aplica se o crop reduziu pelo menos 5% da imagem
+    area_orig = img.size[0] * img.size[1]
+    area_crop = cropped.size[0] * cropped.size[1]
+    if area_crop < area_orig * 0.95:
+        return cropped
+    return img
+
 def analisar_imagem(img):
     session = carregar_modelo()
+    img = autocrop(img)  # remove bordas antes de redimensionar
     img_resized = img.resize((384, 384), Image.LANCZOS)
     img_array = np.array(img_resized).astype(np.float32)
     img_preprocessed = vgg16_preprocess(img_array)
@@ -246,10 +292,12 @@ with col_l:
     img = None
     if paste_result and paste_result.image_data:
         img = paste_result.image_data.convert("RGB")
-        st.image(img, use_container_width=True)
     elif upload:
         img = Image.open(upload).convert("RGB")
-        st.image(img, use_container_width=True)
+
+    if img is not None:
+        img_preview = autocrop(img)
+        st.image(img_preview, use_container_width=True, caption="Pré-visualização (com autocrop)")
 
     st.markdown('<div style="margin-top:0.75rem"></div>', unsafe_allow_html=True)
     analisar = st.button("Analisar", disabled=(img is None))
