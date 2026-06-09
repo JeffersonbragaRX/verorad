@@ -6,6 +6,7 @@ import onnxruntime as ort
 from PIL import Image
 from datetime import datetime
 from streamlit_paste_button import paste_image_button
+from atlas import get_atlas
 
 MODEL_FILENAME = "bone_age_model.onnx"
 MODEL_URL = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/main/bone_age_model.onnx"
@@ -477,6 +478,30 @@ with col_center:
             </div>
             """, unsafe_allow_html=True)
             st.code(laudo, language=None)
+
+            # Atlas G&P
+            atlas = get_atlas(idade_meses)
+            with st.expander(f"📖 Atlas G&P — {atlas['titulo']}", expanded=True):
+                st.markdown("""
+                <style>
+                .atlas-section { font-size:0.68rem; font-weight:600; color:#94A3B8; 
+                    letter-spacing:0.12em; text-transform:uppercase; margin:0.75rem 0 0.4rem 0; }
+                .atlas-item { font-size:0.82rem; color:#374151; line-height:1.65; 
+                    padding: 0.3rem 0 0.3rem 1rem; border-left: 2px solid #E5E8EF; margin-bottom:0.25rem; }
+                .atlas-ref { font-size:0.68rem; color:#CBD5E1; font-family:'DM Mono',monospace; 
+                    margin-top:0.75rem; }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                st.markdown('<div class="atlas-section">🦴 Carpo</div>', unsafe_allow_html=True)
+                for item in atlas["carpo"]:
+                    st.markdown(f'<div class="atlas-item">{item}</div>', unsafe_allow_html=True)
+                
+                st.markdown('<div class="atlas-section">📐 Epífises</div>', unsafe_allow_html=True)
+                for item in atlas["epifises"]:
+                    st.markdown(f'<div class="atlas-item">{item}</div>', unsafe_allow_html=True)
+                
+                st.markdown(f'<div class="atlas-ref">{atlas["referencia_gp"]}</div>', unsafe_allow_html=True)
 
             st.markdown("""
             <div class="vr-notice">
