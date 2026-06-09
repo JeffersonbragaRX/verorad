@@ -335,8 +335,18 @@ with col_c:
             """, unsafe_allow_html=True)
 
             laudo = gerar_laudo(anos, meses, sexo, idade_cron)
-            st.markdown(f'<div class="vr-laudo">{laudo}</div>', unsafe_allow_html=True)
-            st.code(laudo, language=None)
+            laudo_id = "laudo-text"
+            st.markdown(f'''
+            <div class="vr-laudo" style="position:relative">
+                <div id="{laudo_id}">{laudo}</div>
+                <button onclick="navigator.clipboard.writeText(document.getElementById('{laudo_id}').innerText)"
+                    style="position:absolute;top:8px;right:8px;background:#EFF6FF;border:1px solid #BFDBFE;
+                    color:#2563EB;font-size:0.65rem;font-weight:600;padding:3px 10px;border-radius:6px;
+                    cursor:pointer;font-family:DM Sans,sans-serif">
+                    📋 Copiar
+                </button>
+            </div>
+            ''', unsafe_allow_html=True)
 
             atlas = get_atlas(idade_meses)
             carpo_html = "".join(f'<div class="vr-atlas-item">{i}</div>' for i in atlas["carpo"])
