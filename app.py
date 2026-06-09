@@ -59,13 +59,37 @@ def autocrop(img):
         return cropped
     return img
 
-def analisar_imagem(img):
+def _infer_single(session, input_name, pil_img):
+    """Inferência em uma única variante já redimensionada para 384x384."""
+    arr = np.array(pil_img.resize((384, 384), Image.LANCZOS)).astype(np.float32)
+    batch = np.expand_dims(vgg16_preprocess(arr), axis=0)
+    out = session.run(None, {input_name: batch})
+    return max(0, float(out[0][0][0]))
+
+def analisar_imagem(img, usar_tta=True):
     session = carregar_modelo()
-    img = autocrop(img)
-    img_resized = img.resize((384, 384), Image.LANCZOS)
-    img_batch = np.expand_dims(vgg16_preprocess(np.array(img_resized).astype(np.float32)), axis=0)
-    resultado = session.run(None, {session.get_inputs()[0].name: img_batch})
-    idade_meses = max(0, float(resultado[0][0][0]))
+    input_name = session.get_inputs()[0].name
+    base = autocrop(img)
+
+    if not usar_tta:
+        idade_meses = _infer_single(session, input_name, base)
+    else:
+        # Gera variantes leves da mesma imagem e tira a mediana (robusta a outliers)
+        variantes = [
+            base,                                              # original
+            base.transpose(Image.FLIP_LEFT_RIGHT),             # espelhada
+            base.rotate(5, resample=Image.BILINEAR, fillcolor=0),   # +5°
+            base.rotate(-5, resample=Image.BILINEAR, fillcolor=0),  # -5°
+        ]
+        # Zoom leve (corta 4% das bordas)
+        w, h = base.size
+        m = int(min(w, h) * 0.04)
+        if w - 2*m > 10 and h - 2*m > 10:
+            variantes.append(base.crop((m, m, w - m, h - m)))
+
+        previsoes = [_infer_single(session, input_name, v) for v in variantes]
+        idade_meses = float(np.median(previsoes))
+
     anos = int(idade_meses // 12)
     meses = int(round(idade_meses % 12))
     if meses == 12:
@@ -312,7 +336,7 @@ with col_r:
         laudo = gerar_laudo(anos, meses, sexo, ic_meses)
         timeline_svg = render_timeline(idade_meses, ic_meses)
 
-        result_html = '<div class="vr-panel"><div class="vr-result-row"><div><div class="vr-age">' + str(anos) + '<span>a </span>' + f'{meses:02d}' + '<span>m</span></div><div class="vr-meta">' + f'{idade_meses:.2f}' + ' meses · ' + sexo + ' · autocrop ativo</div></div>' + badge_html + '</div><div class="vr-timeline">' + timeline_svg + '</div></div>'
+        result_html = '<div class="vr-panel"><div class="vr-result-row"><div><div class="vr-age">' + str(anos) + '<span>a </span>' + f'{meses:02d}' + '<span>m</span></div><div class="vr-meta">' + f'{idade_meses:.2f}' + ' meses · ' + sexo + ' · autocrop + TTA</div></div>' + badge_html + '</div><div class="vr-timeline">' + timeline_svg + '</div></div>'
         st.markdown(result_html, unsafe_allow_html=True)
 
         laudo_html = '<div class="vr-panel" style="padding-top:1.1rem"><div class="vr-lbl">Texto para laudo</div><div class="vr-laudo"><span id="laudo-txt">' + laudo + '</span><button class="vr-copy-btn" onclick="navigator.clipboard.writeText(document.getElementById(\'laudo-txt\').innerText)">📋 Copiar</button></div></div>'
