@@ -66,7 +66,7 @@ def _infer_single(session, input_name, pil_img):
     out = session.run(None, {input_name: batch})
     return max(0, float(out[0][0][0]))
 
-def analisar_imagem(img, usar_tta=True):
+def analisar_imagem(img, usar_tta=False):
     session = carregar_modelo()
     input_name = session.get_inputs()[0].name
     base = autocrop(img)
@@ -336,7 +336,7 @@ with col_r:
         laudo = gerar_laudo(anos, meses, sexo, ic_meses)
         timeline_svg = render_timeline(idade_meses, ic_meses)
 
-        result_html = '<div class="vr-panel"><div class="vr-result-row"><div><div class="vr-age">' + str(anos) + '<span>a </span>' + f'{meses:02d}' + '<span>m</span></div><div class="vr-meta">' + f'{idade_meses:.2f}' + ' meses · ' + sexo + ' · autocrop + TTA</div></div>' + badge_html + '</div><div class="vr-timeline">' + timeline_svg + '</div></div>'
+        result_html = '<div class="vr-panel"><div class="vr-result-row"><div><div class="vr-age">' + str(anos) + '<span>a </span>' + f'{meses:02d}' + '<span>m</span></div><div class="vr-meta">' + f'{idade_meses:.2f}' + ' meses · ' + sexo + ' · autocrop ativo</div></div>' + badge_html + '</div><div class="vr-timeline">' + timeline_svg + '</div></div>'
         st.markdown(result_html, unsafe_allow_html=True)
 
         laudo_html = '<div class="vr-panel" style="padding-top:1.1rem"><div class="vr-lbl">Texto para laudo</div><div class="vr-laudo"><span id="laudo-txt">' + laudo + '</span><button class="vr-copy-btn" onclick="navigator.clipboard.writeText(document.getElementById(\'laudo-txt\').innerText)">📋 Copiar</button></div></div>'
