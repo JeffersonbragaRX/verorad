@@ -3,3 +3,4 @@ onnxruntime
 Pillow
 numpy
 requests
+streamlit-paste-button
