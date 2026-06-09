@@ -7,7 +7,6 @@ from PIL import Image
 from datetime import datetime
 from streamlit_paste_button import paste_image_button
 
-# --- CONFIGURAÇÃO ---
 MODEL_FILENAME = "bone_age_model.onnx"
 MODEL_URL = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/main/bone_age_model.onnx"
 
@@ -34,7 +33,7 @@ def carregar_modelo():
                         downloaded += len(chunk)
                         if total:
                             pct = int(downloaded / total * 100)
-                            progress.progress(pct, text=f"Carregando modelo... {pct}%")
+                            progress.progress(pct, text=f"Carregando... {pct}%")
                 progress.empty()
     if os.path.getsize(MODEL_FILENAME) < 1_000_000:
         os.remove(MODEL_FILENAME)
@@ -58,304 +57,436 @@ def analisar_imagem(img):
         meses = 0
     return anos, meses, idade_meses
 
-def gerar_laudo(anos, meses, sexo, idade_cronologica):
+def gerar_laudo(anos, meses, sexo, idade_cron):
     sexo_txt = "do sexo masculino" if sexo == "Masculino" else "do sexo feminino"
-    resultado_txt = f"{anos} anos e {meses} meses"
-    
-    if idade_cronologica:
+    concordancia_txt = ""
+    if idade_cron:
         try:
-            ic_anos, ic_meses = map(int, idade_cronologica.split(","))
+            partes = idade_cron.replace(";", ",").split(",")
+            ic_anos, ic_meses = int(partes[0].strip()), int(partes[1].strip())
             ic_total = ic_anos * 12 + ic_meses
             io_total = anos * 12 + meses
             diff = io_total - ic_total
             if abs(diff) <= 12:
-                concordancia = "compatível com a idade cronológica"
+                concordancia_txt = " Idade óssea compatível com a idade cronológica."
             elif diff > 12:
-                concordancia = f"avançada em relação à idade cronológica (diferença de {abs(diff)} meses)"
+                concordancia_txt = f" Idade óssea avançada em relação à idade cronológica (diferença de aproximadamente {abs(diff)} meses)."
             else:
-                concordancia = f"atrasada em relação à idade cronológica (diferença de {abs(diff)} meses)"
-            concordancia_txt = f" Idade óssea {concordancia}."
+                concordancia_txt = f" Idade óssea atrasada em relação à idade cronológica (diferença de aproximadamente {abs(diff)} meses)."
         except:
-            concordancia_txt = ""
-    else:
-        concordancia_txt = ""
-
-    laudo = (
+            pass
+    return (
         f"Radiografia de mão e punho esquerdos {sexo_txt}.\n\n"
-        f"A avaliação da maturação esquelética pelo método automatizado (IA) estima "
-        f"idade óssea de aproximadamente {resultado_txt}.{concordancia_txt}\n\n"
-        f"Nota: Este resultado foi gerado por sistema de inteligência artificial e "
-        f"deve ser correlacionado com dados clínicos e avaliação do radiologista responsável."
+        f"A avaliação automatizada da maturação esquelética por inteligência artificial "
+        f"estima idade óssea de aproximadamente {anos} anos e {meses} meses.{concordancia_txt}\n\n"
+        f"Nota: Resultado gerado por sistema de IA. Deve ser correlacionado com dados "
+        f"clínicos e avaliação do radiologista responsável."
     )
-    return laudo
 
-# --- PÁGINA ---
 st.set_page_config(
     page_title="VeroRad — Idade Óssea",
     page_icon="🦴",
     layout="wide"
 )
 
-# CSS
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    .stApp {
-        background-color: #0A0F1E;
-    }
-
-    /* Header */
-    .vr-header {
-        padding: 2rem 0 1.5rem 0;
-        border-bottom: 1px solid #1E2D4A;
-        margin-bottom: 2rem;
-    }
-    .vr-logo {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: #FFFFFF;
-        letter-spacing: -0.5px;
-    }
-    .vr-logo span {
-        color: #3B82F6;
-    }
-    .vr-tagline {
-        font-size: 0.78rem;
-        color: #4B6087;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        margin-top: 2px;
-    }
-
-    /* Cards */
-    .vr-card {
-        background: #0F1729;
-        border: 1px solid #1E2D4A;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    .vr-card-title {
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: #3B82F6;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        margin-bottom: 1rem;
-    }
-
-    /* Resultado */
-    .vr-result-main {
-        background: linear-gradient(135deg, #0F1729 0%, #0D1F3C 100%);
-        border: 1px solid #2563EB;
-        border-radius: 12px;
-        padding: 2rem;
-        text-align: center;
-        margin: 1rem 0;
-    }
-    .vr-result-label {
-        font-size: 0.72rem;
-        color: #4B6087;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-        margin-bottom: 0.5rem;
-    }
-    .vr-result-value {
-        font-size: 3rem;
-        font-weight: 700;
-        color: #FFFFFF;
-        line-height: 1;
-        letter-spacing: -2px;
-    }
-    .vr-result-sub {
-        font-size: 0.85rem;
-        color: #4B6087;
-        margin-top: 0.5rem;
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    /* Histórico */
-    .vr-history-item {
-        background: #0F1729;
-        border: 1px solid #1E2D4A;
-        border-radius: 8px;
-        padding: 0.9rem 1.1rem;
-        margin-bottom: 0.5rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .vr-history-age {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #FFFFFF;
-    }
-    .vr-history-meta {
-        font-size: 0.72rem;
-        color: #4B6087;
-        font-family: 'JetBrains Mono', monospace;
-    }
-    .vr-badge {
-        font-size: 0.65rem;
-        padding: 2px 8px;
-        border-radius: 20px;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-    }
-    .vr-badge-m { background: #1E3A5F; color: #60A5FA; }
-    .vr-badge-f { background: #3B1F5E; color: #C084FC; }
-
-    /* Laudo */
-    .vr-laudo {
-        background: #070D1A;
-        border: 1px solid #1E2D4A;
-        border-left: 3px solid #3B82F6;
-        border-radius: 8px;
-        padding: 1.25rem;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.8rem;
-        color: #94A3B8;
-        line-height: 1.7;
-        white-space: pre-wrap;
-    }
-
-    /* Aviso */
-    .vr-warning {
-        background: #1A1200;
-        border: 1px solid #854D0E;
-        border-radius: 8px;
-        padding: 0.9rem 1.1rem;
-        font-size: 0.78rem;
-        color: #A16207;
-        margin-top: 1rem;
-    }
-
-    /* Botão analisar */
-    .stButton > button {
-        background: #2563EB !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-        font-size: 0.9rem !important;
-        padding: 0.65rem 1.5rem !important;
-        width: 100% !important;
-        transition: background 0.2s !important;
-    }
-    .stButton > button:hover {
-        background: #1D4ED8 !important;
-    }
-
-    /* Inputs */
-    .stTextInput input, .stSelectbox select {
-        background: #0F1729 !important;
-        border: 1px solid #1E2D4A !important;
-        color: #E2E8F0 !important;
-        border-radius: 8px !important;
-    }
-
-    /* Hide streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* Divider */
-    hr {border-color: #1E2D4A !important;}
-</style>
-""", unsafe_allow_html=True)
-
-# Inicializa histórico
 if "historico" not in st.session_state:
     st.session_state.historico = []
 
-# --- HEADER ---
 st.markdown("""
-<div class="vr-header">
-    <div class="vr-logo">Vero<span>Rad</span></div>
-    <div class="vr-tagline">Estimativa de Idade Óssea por IA · Radiologia Pediátrica</div>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+*, html, body { font-family: 'DM Sans', sans-serif !important; }
+
+.stApp {
+    background: #F7F8FA !important;
+}
+
+/* Remove streamlit chrome */
+#MainMenu, footer, header { visibility: hidden; }
+.block-container { padding-top: 0 !important; max-width: 100% !important; }
+
+/* ── TOP BAR ── */
+.vr-topbar {
+    background: #FFFFFF;
+    border-bottom: 1px solid #E5E8EF;
+    padding: 0 2.5rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+.vr-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+.vr-brand-name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #0A0E1A;
+    letter-spacing: -0.3px;
+}
+.vr-brand-name em {
+    color: #2563EB;
+    font-style: normal;
+}
+.vr-brand-tag {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: #94A3B8;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-left: 1px solid #E2E8F0;
+    padding-left: 8px;
+    margin-left: 2px;
+}
+.vr-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: #64748B;
+}
+.vr-dot {
+    width: 7px; height: 7px;
+    background: #22C55E;
+    border-radius: 50%;
+}
+
+/* ── MAIN GRID ── */
+.vr-main {
+    display: grid;
+    grid-template-columns: 380px 1fr 280px;
+    gap: 0;
+    min-height: calc(100vh - 56px);
+}
+
+/* ── LEFT PANEL ── */
+.vr-left {
+    background: #FFFFFF;
+    border-right: 1px solid #E5E8EF;
+    padding: 1.75rem 1.5rem;
+}
+.vr-section-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: #94A3B8;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 0.85rem;
+    margin-top: 1.5rem;
+}
+.vr-section-label:first-child { margin-top: 0; }
+
+/* ── CENTER ── */
+.vr-center {
+    padding: 2rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+/* ── RESULT BLOCK ── */
+.vr-result-wrap {
+    width: 100%;
+    max-width: 560px;
+}
+.vr-result-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E8EF;
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    margin-bottom: 1.25rem;
+}
+.vr-result-eyebrow {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #94A3B8;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+.vr-result-number {
+    font-size: 5rem;
+    font-weight: 300;
+    color: #0A0E1A;
+    line-height: 1;
+    letter-spacing: -4px;
+}
+.vr-result-number strong {
+    font-weight: 600;
+    color: #2563EB;
+}
+.vr-result-unit {
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: #64748B;
+    letter-spacing: 0;
+}
+.vr-result-sub {
+    font-size: 0.78rem;
+    color: #94A3B8;
+    margin-top: 0.75rem;
+    font-family: 'DM Mono', monospace;
+}
+.vr-concordancia {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+.vr-concordancia.ok { background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; }
+.vr-concordancia.avancada { background: #FFF7ED; color: #EA580C; border: 1px solid #FED7AA; }
+.vr-concordancia.atrasada { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+
+/* Laudo */
+.vr-laudo-box {
+    background: #FFFFFF;
+    border: 1px solid #E5E8EF;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    width: 100%;
+    max-width: 560px;
+    margin-bottom: 1rem;
+}
+.vr-laudo-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: #94A3B8;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+}
+.vr-laudo-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    color: #374151;
+    line-height: 1.75;
+    white-space: pre-wrap;
+}
+
+/* Aviso regulatório */
+.vr-notice {
+    width: 100%;
+    max-width: 560px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.72rem;
+    color: #92400E;
+    line-height: 1.5;
+}
+
+/* Placeholder */
+.vr-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 320px;
+    width: 100%;
+    max-width: 560px;
+    border: 1.5px dashed #CBD5E1;
+    border-radius: 16px;
+    color: #CBD5E1;
+    gap: 12px;
+}
+.vr-placeholder-icon { font-size: 2.5rem; }
+.vr-placeholder-text { font-size: 0.8rem; }
+
+/* ── RIGHT PANEL — HISTÓRICO ── */
+.vr-right {
+    background: #FFFFFF;
+    border-left: 1px solid #E5E8EF;
+    padding: 1.75rem 1.25rem;
+}
+.vr-hist-item {
+    border: 1px solid #F1F5F9;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.5rem;
+    background: #FAFBFC;
+    cursor: default;
+}
+.vr-hist-age {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #0A0E1A;
+    letter-spacing: -0.3px;
+}
+.vr-hist-meta {
+    font-size: 0.68rem;
+    color: #94A3B8;
+    font-family: 'DM Mono', monospace;
+    margin-top: 2px;
+}
+.vr-hist-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+    float: right;
+}
+.badge-m { background: #EFF6FF; color: #2563EB; }
+.badge-f { background: #FDF4FF; color: #9333EA; }
+
+/* Streamlit overrides */
+div[data-testid="stSelectbox"] > div,
+div[data-testid="stTextInput"] > div > div {
+    border-radius: 8px !important;
+    border-color: #E5E8EF !important;
+    background: #FAFBFC !important;
+    font-size: 0.85rem !important;
+}
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    font-size: 0.85rem !important;
+    width: 100% !important;
+    height: 40px !important;
+    background: #2563EB !important;
+    color: white !important;
+    border: none !important;
+    letter-spacing: 0.01em !important;
+}
+.stButton > button:hover { background: #1D4ED8 !important; }
+.stButton > button:disabled { background: #E2E8F0 !important; color: #94A3B8 !important; }
+
+div[data-testid="stFileUploader"] {
+    border: 1.5px dashed #CBD5E1 !important;
+    border-radius: 10px !important;
+    background: #FAFBFC !important;
+    padding: 0.5rem !important;
+}
+
+hr { border-color: #E5E8EF !important; margin: 1.25rem 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── TOP BAR ──
+st.markdown("""
+<div class="vr-topbar">
+    <div class="vr-brand">
+        <div class="vr-brand-name">Vero<em>Rad</em></div>
+        <div class="vr-brand-tag">Bone Age AI</div>
+    </div>
+    <div class="vr-status">
+        <div class="vr-dot"></div>
+        Sistema operacional
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- LAYOUT PRINCIPAL ---
-col_esq, col_dir = st.columns([1.1, 1], gap="large")
+# ── 3 COLUNAS ──
+col_left, col_center, col_right = st.columns([1.1, 1.8, 0.85])
 
-with col_esq:
-    # DADOS DO PACIENTE
-    st.markdown('<div class="vr-card-title">📋 Dados do Exame</div>', unsafe_allow_html=True)
+# ════════════════ PAINEL ESQUERDO ════════════════
+with col_left:
+    st.markdown('<div class="vr-section-label">Dados do Exame</div>', unsafe_allow_html=True)
 
-    col_s, col_i = st.columns(2)
-    with col_s:
-        sexo = st.selectbox("Sexo biológico", ["Masculino", "Feminino"], label_visibility="visible")
-    with col_i:
-        idade_cron = st.text_input("Idade cronológica (opcional)", placeholder="ex: 8,6  →  anos,meses")
+    sexo = st.selectbox("Sexo biológico", ["Masculino", "Feminino"], label_visibility="collapsed")
 
-    st.markdown("---")
-
-    # ENTRADA DE IMAGEM
-    st.markdown('<div class="vr-card-title">🩻 Radiografia de Mão e Punho (PA)</div>', unsafe_allow_html=True)
-
-    paste_result = paste_image_button(
-        label="📋 Colar imagem da área de transferência",
-        help="Copie a imagem (Ctrl+C) e clique aqui para colar"
+    idade_cron = st.text_input(
+        "Idade cronológica",
+        placeholder="anos, meses  (ex: 8, 6)",
+        label_visibility="collapsed"
     )
 
+    st.markdown('<div class="vr-section-label">Imagem</div>', unsafe_allow_html=True)
+
+    paste_result = paste_image_button(label="📋  Colar da área de transferência")
+
     upload = st.file_uploader(
-        "ou selecione o arquivo:",
+        "upload",
         type=["png", "jpg", "jpeg"],
-        label_visibility="visible"
+        label_visibility="collapsed"
     )
 
     img = None
     if paste_result and paste_result.image_data:
         img = paste_result.image_data.convert("RGB")
-        st.image(img, use_container_width=True)
+        st.image(img, use_container_width=True, caption="Imagem colada")
     elif upload:
         img = Image.open(upload).convert("RGB")
-        st.image(img, use_container_width=True)
+        st.image(img, use_container_width=True, caption="Imagem carregada")
 
     st.markdown("---")
+    analisar = st.button("Analisar", disabled=(img is None))
 
-    analisar = st.button("Analisar Idade Óssea", disabled=(img is None))
-
-with col_dir:
+# ════════════════ PAINEL CENTRAL ════════════════
+with col_center:
     if analisar and img is not None:
         try:
             with st.spinner("Processando..."):
                 anos, meses, idade_meses = analisar_imagem(img)
 
-            # Resultado principal
+            # Concordância
+            conc_class = ""
+            conc_txt = ""
+            if idade_cron:
+                try:
+                    partes = idade_cron.replace(";", ",").split(",")
+                    ic_anos, ic_meses = int(partes[0].strip()), int(partes[1].strip())
+                    diff = (anos * 12 + meses) - (ic_anos * 12 + ic_meses)
+                    if abs(diff) <= 12:
+                        conc_class = "ok"
+                        conc_txt = "Compatível com idade cronológica"
+                    elif diff > 12:
+                        conc_class = "avancada"
+                        conc_txt = f"Avançada · +{abs(diff)} meses"
+                    else:
+                        conc_class = "atrasada"
+                        conc_txt = f"Atrasada · -{abs(diff)} meses"
+                except:
+                    pass
+
+            conc_html = f'<div class="vr-concordancia {conc_class}">{conc_txt}</div>' if conc_txt else ""
+
             st.markdown(f"""
-            <div class="vr-result-main">
-                <div class="vr-result-label">Idade Óssea Estimada</div>
-                <div class="vr-result-value">{anos}<span style="font-size:1.5rem;color:#4B6087"> a </span>{meses}<span style="font-size:1.5rem;color:#4B6087"> m</span></div>
-                <div class="vr-result-sub">{idade_meses:.1f} meses totais · {sexo}</div>
+            <div class="vr-result-card">
+                <div class="vr-result-eyebrow">Idade Óssea Estimada</div>
+                <div class="vr-result-number">
+                    <strong>{anos}</strong>
+                    <span class="vr-result-unit">a</span>
+                    <strong>{meses:02d}</strong>
+                    <span class="vr-result-unit">m</span>
+                </div>
+                <div class="vr-result-sub">{idade_meses:.1f} meses · {sexo}</div>
+                {conc_html}
             </div>
             """, unsafe_allow_html=True)
 
-            # Laudo gerado
-            st.markdown('<div class="vr-card-title" style="margin-top:1.5rem">📄 Texto para Laudo</div>', unsafe_allow_html=True)
-            laudo = gerar_laudo(anos, meses, sexo, idade_cron if idade_cron else None)
-            st.markdown(f'<div class="vr-laudo">{laudo}</div>', unsafe_allow_html=True)
+            # Laudo
+            laudo = gerar_laudo(anos, meses, sexo, idade_cron)
+            st.markdown(f"""
+            <div class="vr-laudo-box">
+                <div class="vr-laudo-label">Texto para Laudo</div>
+                <div class="vr-laudo-text">{laudo}</div>
+            </div>
+            """, unsafe_allow_html=True)
             st.code(laudo, language=None)
 
-            # Aviso
             st.markdown("""
-            <div class="vr-warning">
-                ⚠️ Resultado gerado por IA. Não substitui avaliação do radiologista responsável. 
-                Use como ferramenta auxiliar de fluxo de trabalho.
+            <div class="vr-notice">
+                ⚠️ Ferramenta de auxílio diagnóstico. Não substitui avaliação do radiologista responsável.
             </div>
             """, unsafe_allow_html=True)
 
-            # Adiciona ao histórico
+            # Histórico
             st.session_state.historico.insert(0, {
-                "anos": anos,
-                "meses": meses,
-                "sexo": sexo,
+                "anos": anos, "meses": meses, "sexo": sexo,
                 "horario": datetime.now().strftime("%H:%M"),
                 "meses_totais": idade_meses
             })
@@ -363,33 +494,37 @@ with col_dir:
                 st.session_state.historico = st.session_state.historico[:20]
 
         except Exception as e:
-            st.error(f"Erro na análise: {e}")
-
-    elif not analisar:
-        # Placeholder
+            st.error(f"Erro: {e}")
+    else:
         st.markdown("""
-        <div style="height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#1E2D4A;border:1px dashed #1E2D4A;border-radius:12px;margin-top:0.5rem">
-            <div style="font-size:2.5rem">🦴</div>
-            <div style="font-size:0.8rem;margin-top:0.5rem;color:#2D3F5E">Aguardando radiografia</div>
+        <div class="vr-placeholder">
+            <div class="vr-placeholder-icon">🩻</div>
+            <div class="vr-placeholder-text">Carregue uma radiografia para iniciar</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # HISTÓRICO DA SESSÃO
-    if st.session_state.historico:
-        st.markdown('<div class="vr-card-title" style="margin-top:2rem">🕐 Histórico da Sessão</div>', unsafe_allow_html=True)
+# ════════════════ PAINEL DIREITO — HISTÓRICO ════════════════
+with col_right:
+    st.markdown('<div class="vr-section-label">Histórico da Sessão</div>', unsafe_allow_html=True)
+
+    if not st.session_state.historico:
+        st.markdown('<p style="font-size:0.78rem;color:#CBD5E1">Nenhum exame analisado ainda.</p>', unsafe_allow_html=True)
+    else:
         for item in st.session_state.historico:
-            badge_class = "vr-badge-m" if item["sexo"] == "Masculino" else "vr-badge-f"
-            badge_letra = "M" if item["sexo"] == "Masculino" else "F"
+            badge = "M" if item["sexo"] == "Masculino" else "F"
+            bc = "badge-m" if item["sexo"] == "Masculino" else "badge-f"
             st.markdown(f"""
-            <div class="vr-history-item">
-                <div>
-                    <div class="vr-history-age">{item['anos']}a {item['meses']}m</div>
-                    <div class="vr-history-meta">{item['meses_totais']:.1f} meses · {item['horario']}</div>
-                </div>
-                <span class="vr-badge {badge_class}">{badge_letra}</span>
+            <div class="vr-hist-item">
+                <span class="vr-hist-badge {bc}">{badge}</span>
+                <div class="vr-hist-age">{item['anos']}a {item['meses']:02d}m</div>
+                <div class="vr-hist-meta">{item['meses_totais']:.1f} meses · {item['horario']}</div>
             </div>
             """, unsafe_allow_html=True)
 
-        if st.button("Limpar histórico", type="secondary"):
+        if st.button("Limpar", type="secondary"):
             st.session_state.historico = []
             st.rerun()
+
+    st.markdown("---")
+    st.markdown('<div class="vr-section-label">Sobre</div>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:0.72rem;color:#94A3B8;line-height:1.6">Modelo VGG16 treinado no dataset RSNA Pediatric Bone Age Challenge. Saída em meses, convertida para anos e meses.</p>', unsafe_allow_html=True)
