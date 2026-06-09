@@ -110,10 +110,7 @@ if "historico" not in st.session_state:
     st.session_state.historico = []
 if "img_raw" not in st.session_state:
     st.session_state.img_raw = None
-if "img_crop" not in st.session_state:
-    st.session_state.img_crop = None
-if "modo_crop" not in st.session_state:
-    st.session_state.modo_crop = False
+
 if "resultado" not in st.session_state:
     st.session_state.resultado = None
 
@@ -212,6 +209,12 @@ with col_l:
     idade_cron = st.text_input("ic", placeholder="anos, meses  (ex: 8, 6)", label_visibility="collapsed")
 
     st.markdown('<div class="vr-lbl" style="margin-top:0.75rem">Radiografia</div>', unsafe_allow_html=True)
+    st.markdown('''
+    <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;
+        padding:0.5rem 0.75rem;font-size:0.7rem;color:#15803D;margin-bottom:0.5rem;line-height:1.5">
+        💡 <b>Dica:</b> Use <b>Win + Shift + S</b> e selecione <b>só a mão e o punho</b> — sem menus do PACS ao redor.
+    </div>
+    ''', unsafe_allow_html=True)
     paste_result = paste_image_button(label="📋  Colar imagem")
     upload = st.file_uploader("up", type=["png","jpg","jpeg"], label_visibility="collapsed")
 
@@ -224,28 +227,16 @@ with col_l:
 
     if nova_img is not None:
         st.session_state.img_raw = nova_img
-        st.session_state.img_crop = None
         st.session_state.resultado = None
-        st.session_state.modo_crop = False
 
     # Mostra imagem atual (raw ou crop manual)
-    img_exibir = st.session_state.img_crop if st.session_state.img_crop else st.session_state.img_raw
+    img_exibir = st.session_state.img_raw
 
     if img_exibir:
-        caption = "✂️ Recorte manual aplicado" if st.session_state.img_crop else "Imagem original"
+        caption = "Imagem carregada"
         st.image(img_exibir, use_container_width=True, caption=caption)
 
-        # Botão de recorte manual
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
-            if st.button("✂️ Recortar", type="secondary"):
-                st.session_state.modo_crop = True
-                st.rerun()
-        with col_b2:
-            if st.session_state.img_crop and st.button("↩️ Resetar"):
-                st.session_state.img_crop = None
-                st.session_state.resultado = None
-                st.rerun()
+
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -253,47 +244,9 @@ with col_l:
 with col_c:
     st.markdown('<div style="padding: 1rem 0.5rem 0 0.5rem">', unsafe_allow_html=True)
 
-    # MODO CROP MANUAL
-    if st.session_state.modo_crop and st.session_state.img_raw:
-        img_raw = st.session_state.img_raw
-        W, H = img_raw.size
-
-        st.markdown('<div class="vr-crop-hint">✂️ Ajuste os valores abaixo para enquadrar só a mão e o punho. A prévia atualiza em tempo real.</div>', unsafe_allow_html=True)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            x1_pct = st.number_input("Esquerda %", 0, 49, 5, step=1)
-            y1_pct = st.number_input("Superior %", 0, 49, 5, step=1)
-        with col_b:
-            x2_pct = st.number_input("Direita %", 51, 100, 95, step=1)
-            y2_pct = st.number_input("Inferior %", 51, 100, 95, step=1)
-
-        x1 = int(W * x1_pct / 100)
-        y1 = int(H * y1_pct / 100)
-        x2 = int(W * x2_pct / 100)
-        y2 = int(H * y2_pct / 100)
-
-        preview = img_raw.copy()
-        draw = ImageDraw.Draw(preview)
-        lw = max(3, W // 150)
-        draw.rectangle([x1, y1, x2, y2], outline="#2563EB", width=lw)
-        st.image(preview, use_container_width=True, caption="Prévia — ajuste os valores acima")
-
-        col_ok, col_cancel = st.columns(2)
-        with col_ok:
-            if st.button("✅ Aplicar e reanalisar"):
-                st.session_state.img_crop = img_raw.crop((x1, y1, x2, y2))
-                st.session_state.modo_crop = False
-                st.session_state.resultado = None
-                st.rerun()
-        with col_cancel:
-            if st.button("❌ Cancelar"):
-                st.session_state.modo_crop = False
-                st.rerun()
-
     # ANÁLISE AUTOMÁTICA
-    elif st.session_state.img_raw and not st.session_state.modo_crop:
-        img_para_analisar = st.session_state.img_crop if st.session_state.img_crop else st.session_state.img_raw
+    if st.session_state.img_raw:
+        img_para_analisar = st.session_state.img_raw
 
         # Roda análise automaticamente se não tem resultado ainda
         if st.session_state.resultado is None:
