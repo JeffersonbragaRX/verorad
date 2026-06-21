@@ -10,14 +10,12 @@ from streamlit_paste_button import paste_image_button
 from atlas import get_atlas
 from preprocess import preprocess, load_stats
 
-# OpenCV para autocrop robusto (opcional - fallback seguro se ausente)
 try:
     import cv2
     _HAS_CV2 = True
 except ImportError:
     _HAS_CV2 = False
 
-# -- Modelo v2 (ConvNeXt V2 + metadados) --
 MODEL_V2_FILENAME = "bone_age_v2.onnx"
 STATS_V2_FILENAME = "bone_age_v2_stats.json"
 MODEL_V2_URL  = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/main/bone_age_v2.onnx"
@@ -25,7 +23,6 @@ STATS_V2_URL  = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/
 
 
 def _hf_headers():
-    """Token do HuggingFace (repo privado), lido dos Secrets do Streamlit."""
     token = None
     try:
         token = st.secrets.get("HF_TOKEN", None)
@@ -36,10 +33,7 @@ def _hf_headers():
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
-# --------------------------- CORE ---------------------------
-
-def _download_file(url: str, dest: str, label: str) -> None:
-    """Baixa arquivo com barra de progresso (autenticado para repo privado)."""
+def _download_file(url, dest, label):
     with requests.get(url, stream=True, headers=_hf_headers()) as r:
         r.raise_for_status()
         total = int(r.headers.get('content-length', 0))
@@ -50,8 +44,7 @@ def _download_file(url: str, dest: str, label: str) -> None:
                 f.write(chunk)
                 downloaded += len(chunk)
                 if total:
-                    progress.progress(int(downloaded / total * 100),
-                                      text=f"Baixando {label}... {int(downloaded/total*100)}%")
+                    progress.progress(int(downloaded/total*100), text=f"Baixando {label}... {int(downloaded/total*100)}%")
         progress.empty()
 
 
@@ -63,77 +56,84 @@ def carregar_modelo():
         if os.path.getsize(MODEL_V2_FILENAME) < 100_000:
             os.remove(MODEL_V2_FILENAME)
             raise RuntimeError("Arquivo ONNX corrompido ou token invalido.")
-
         if not os.path.exists(STATS_V2_FILENAME):
             _download_file(STATS_V2_URL, STATS_V2_FILENAME, "stats")
-
     session = ort.InferenceSession(MODEL_V2_FILENAME, providers=["CPUExecutionProvider"])
     stats = load_stats(STATS_V2_FILENAME)
     return session, stats
 
 
-# ----------------------- AUTOCROP ROBUSTO -----------------------
-
-def autocrop(img: Image.Image) -> Image.Image:
+def autocrop(img):
     """
-    Isola a mao na imagem, descartando marcacoes (D/E), reguas e textos separados.
-    Estrategia: maior componente conectado claro = a mao.
-    Lida com fundo escuro OU claro. Em qualquer erro, retorna imagem original.
+    Isola UMA mao. Se houver duas maos separadas, usa a da esquerda da imagem.
+    Em qualquer erro, retorna a imagem original.
     """
     if not _HAS_CV2:
         return _autocrop_legado(img)
-
     try:
         rgb = np.array(img.convert("RGB"))
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         h, w = gray.shape
 
-        cantos = [gray[0, 0], gray[0, -1], gray[-1, 0], gray[-1, -1]]
+        cantos = [gray[0,0], gray[0,-1], gray[-1,0], gray[-1,-1]]
         fundo_escuro = np.mean(cantos) < 110
 
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
+        blur = cv2.GaussianBlur(gray, (5,5), 0)
         if fundo_escuro:
             _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         else:
             _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-        num, labels, stats_cc, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        num, labels, stats_cc, cent = cv2.connectedComponentsWithStats(mask, connectivity=8)
         if num <= 1:
             return _autocrop_legado(img)
 
-        areas = stats_cc[1:, cv2.CC_STAT_AREA]
-        maior = 1 + int(np.argmax(areas))
+        # Componentes ordenados por area (do maior pro menor), ignorando fundo
+        comps = []
+        for i in range(1, num):
+            area = stats_cc[i, cv2.CC_STAT_AREA]
+            comps.append((i, area))
+        comps.sort(key=lambda t: t[1], reverse=True)
 
-        if stats_cc[maior, cv2.CC_STAT_AREA] < (h * w * 0.02):
+        area_total = h * w
+        # Candidatos "mao" = componentes grandes (>8% da imagem)
+        grandes = [c for c in comps if c[1] > area_total * 0.08]
+
+        if len(grandes) == 0:
             return _autocrop_legado(img)
 
-        x  = stats_cc[maior, cv2.CC_STAT_LEFT]
-        y  = stats_cc[maior, cv2.CC_STAT_TOP]
-        bw = stats_cc[maior, cv2.CC_STAT_WIDTH]
-        bh = stats_cc[maior, cv2.CC_STAT_HEIGHT]
+        if len(grandes) >= 2:
+            # Provavelmente duas maos: escolher a mais a ESQUERDA da imagem
+            g0 = grandes[0][0]
+            g1 = grandes[1][0]
+            cx0 = cent[g0][0]
+            cx1 = cent[g1][0]
+            escolhido = g0 if cx0 <= cx1 else g1
+        else:
+            escolhido = grandes[0][0]
 
-        pad_x = max(10, int(bw * 0.04))
-        pad_y = max(10, int(bh * 0.04))
+        x  = stats_cc[escolhido, cv2.CC_STAT_LEFT]
+        y  = stats_cc[escolhido, cv2.CC_STAT_TOP]
+        bw = stats_cc[escolhido, cv2.CC_STAT_WIDTH]
+        bh = stats_cc[escolhido, cv2.CC_STAT_HEIGHT]
+
+        pad_x = max(10, int(bw*0.05))
+        pad_y = max(10, int(bh*0.05))
         x0 = max(0, x - pad_x)
         y0 = max(0, y - pad_y)
         x1 = min(w, x + bw + pad_x)
         y1 = min(h, y + bh + pad_y)
 
-        if (x1 - x0) * (y1 - y0) < h * w * 0.92:
-            return img.crop((x0, y0, x1, y1))
-        return img
-
+        return img.crop((x0, y0, x1, y1))
     except Exception:
         return _autocrop_legado(img)
 
 
-def _autocrop_legado(img: Image.Image) -> Image.Image:
-    """Metodo antigo (numpy puro), fallback seguro."""
+def _autocrop_legado(img):
     try:
         gray = np.array(img.convert('L')).astype(np.float32)
         cantos = [gray[0,0], gray[0,-1], gray[-1,0], gray[-1,-1]]
@@ -142,8 +142,8 @@ def _autocrop_legado(img: Image.Image) -> Image.Image:
         rows, cols = np.any(mask, axis=1), np.any(mask, axis=0)
         if not rows.any() or not cols.any():
             return img
-        rmin, rmax = np.where(rows)[0][[0, -1]]
-        cmin, cmax = np.where(cols)[0][[0, -1]]
+        rmin, rmax = np.where(rows)[0][[0,-1]]
+        cmin, cmax = np.where(cols)[0][[0,-1]]
         h, w = gray.shape
         pad_r = max(8, int((rmax-rmin)*0.03)); pad_c = max(8, int((cmax-cmin)*0.03))
         rmin, rmax = max(0,rmin-pad_r), min(h,rmax+pad_r)
@@ -156,32 +156,21 @@ def _autocrop_legado(img: Image.Image) -> Image.Image:
         return img
 
 
-def analisar_imagem(img, sexo_int: int, idade_cron_meses: float):
+def analisar_imagem(img, sexo_int, idade_cron_meses):
     session, stats = carregar_modelo()
     base = autocrop(img)
-
     img_t, meta_t = preprocess(base, sexo_int, idade_cron_meses, stats=stats)
     img_batch  = img_t[np.newaxis, ...]
     meta_batch = meta_t[np.newaxis, ...]
-
     out_norm = session.run(None, {"image": img_batch, "meta": meta_batch})[0][0]
     bone_age = float(out_norm) * stats["boneage_std"] + stats["boneage_mean"]
     bone_age = float(np.clip(bone_age, 0, 228))
-
     anos = int(bone_age // 12)
     meses = int(round(bone_age % 12))
     if meses == 12:
         anos += 1; meses = 0
     return anos, meses, bone_age
 
-def parse_ic(idade_cron):
-    if not idade_cron or "," not in idade_cron:
-        return None
-    try:
-        p = idade_cron.replace(";", ",").split(",")
-        return int(p[0].strip())*12 + int(p[1].strip())
-    except:
-        return None
 
 def gerar_laudo(anos, meses, sexo, ic_meses):
     sexo_txt = "masculino" if sexo == "Masculino" else "feminino"
@@ -200,6 +189,7 @@ def gerar_laudo(anos, meses, sexo, ic_meses):
         f"em aproximadamente {anos} anos e {meses} meses.{conc} "
         f"Resultado gerado por sistema de auxilio diagnostico - correlacionar com dados clinicos."
     )
+
 
 def render_timeline(io_meses, ic_meses=None):
     x0, x1, mid = 38, 562, 56
@@ -229,16 +219,11 @@ def render_timeline(io_meses, ic_meses=None):
         f'{ticks}{gap}{ic_marker}'
         f'<line x1="{io_x:.1f}" y1="{mid-13}" x2="{io_x:.1f}" y2="{mid+13}" stroke="#1D4ED8" stroke-width="2"/>'
         f'<circle cx="{io_x:.1f}" cy="{mid}" r="5" fill="#1D4ED8"/>'
-        f'<circle cx="{io_x:.1f}" cy="{mid}" r="5" fill="none" stroke="#1D4ED8" stroke-width="2" opacity="0.25">'
-        f'<animate attributeName="r" from="5" to="11" dur="1.4s" repeatCount="indefinite"/>'
-        f'<animate attributeName="opacity" from="0.35" to="0" dur="1.4s" repeatCount="indefinite"/>'
-        f'</circle>'
         f'<text x="{io_x:.1f}" y="{mid-19}" font-size="8.5" fill="#1D4ED8" text-anchor="middle" font-weight="600" font-family="Inter">IO</text>'
         f'<text x="{x0}" y="14" font-size="8" fill="#9CA3AF" font-family="Inter" letter-spacing="0.1em">MATURACAO ESQUELETICA . ANOS</text>'
         f'</svg>'
     )
 
-# --------------------------- PAGE ---------------------------
 st.set_page_config(page_title="VeroRad | Bone Age AI", page_icon="x", layout="wide")
 
 for k, v in [("historico", []), ("img_raw", None), ("resultado", None)]:
@@ -248,25 +233,19 @@ for k, v in [("historico", []), ("img_raw", None), ("resultado", None)]:
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 *, html, body { font-family: 'Inter', sans-serif !important; }
 .stApp { background: #F4F5F7 !important; }
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding: 0 !important; max-width: 100% !important; }
-
 @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
-
-.vr-top { background: #fff; border-bottom: 1px solid #E5E7EB; padding: 0 2rem; height: 54px; display: flex; align-items: center; justify-content: space-between; }
-.vr-logo { font-family: 'Space Grotesk', sans-serif !important; font-size: 1.15rem; font-weight: 700; color: #0F1115; letter-spacing: -0.02em; }
-.vr-logo em { color: #1D4ED8; font-style: normal; }
-.vr-tag { font-size: 0.62rem; color: #9CA3AF; letter-spacing: 0.16em; text-transform: uppercase; margin-left: 12px; }
+.vr-top { background:#fff; border-bottom:1px solid #E5E7EB; padding:0 2rem; height:54px; display:flex; align-items:center; justify-content:space-between; }
+.vr-logo { font-family:'Space Grotesk',sans-serif !important; font-size:1.15rem; font-weight:700; color:#0F1115; letter-spacing:-0.02em; }
+.vr-logo em { color:#1D4ED8; font-style:normal; }
+.vr-tag { font-size:0.62rem; color:#9CA3AF; letter-spacing:0.16em; text-transform:uppercase; margin-left:12px; }
 .vr-online { display:flex; align-items:center; gap:7px; font-size:0.7rem; font-weight:500; color:#059669; background:#ECFDF5; padding:5px 13px; border-radius:99px; border:1px solid #A7F3D0; }
-.vr-online::before { content:''; width:6px; height:6px; border-radius:50%; background:#059669; animation:pulse 2s infinite; }
-@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(5,150,105,0.4);} 70%{box-shadow:0 0 0 6px rgba(5,150,105,0);} 100%{box-shadow:0 0 0 0 rgba(5,150,105,0);} }
-
+.vr-online::before { content:''; width:6px; height:6px; border-radius:50%; background:#059669; }
 .vr-panel { background:#fff; border:1px solid #E5E7EB; border-radius:14px; padding:1.4rem 1.6rem; box-shadow:0 1px 2px rgba(16,17,21,0.04); margin-bottom:1rem; animation:fadeUp 0.45s cubic-bezier(0.22,1,0.36,1); }
 .vr-lbl { font-size:0.6rem; font-weight:600; color:#9CA3AF; letter-spacing:0.14em; text-transform:uppercase; margin-bottom:0.65rem; }
-
 .vr-result-row { display:flex; align-items:flex-start; justify-content:space-between; }
 .vr-age { font-family:'Space Grotesk',sans-serif !important; font-size:3.6rem; font-weight:600; color:#0F1115; line-height:0.9; letter-spacing:-0.04em; }
 .vr-age span { font-size:1.3rem; font-weight:400; color:#9CA3AF; letter-spacing:0; }
@@ -275,40 +254,30 @@ st.markdown("""
 .badge-ok { background:#ECFDF5; color:#15803D; border:1px solid #A7F3D0; }
 .badge-av { background:#FFF7ED; color:#C2410C; border:1px solid #FED7AA; }
 .badge-at { background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; }
-
 .vr-timeline { margin:1.4rem 0 0.5rem; padding-top:1.2rem; border-top:1px solid #F3F4F6; }
-
 .vr-laudo { background:#F8FAFC; border-left:3px solid #1D4ED8; border-radius:0 8px 8px 0; padding:0.9rem 1rem; font-family:'JetBrains Mono',monospace; font-size:0.74rem; color:#334155; line-height:1.7; position:relative; }
-.vr-copy-btn { position:absolute; top:8px; right:8px; background:#fff; border:1px solid #E2E8F0; color:#64748B; font-size:0.64rem; font-weight:600; padding:4px 9px; border-radius:5px; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.15s; }
+.vr-copy-btn { position:absolute; top:8px; right:8px; background:#fff; border:1px solid #E2E8F0; color:#64748B; font-size:0.64rem; font-weight:600; padding:4px 9px; border-radius:5px; cursor:pointer; font-family:'Inter',sans-serif; }
 .vr-copy-btn:hover { background:#1D4ED8; color:#fff; border-color:#1D4ED8; }
-
-.vr-atlas { background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:1.1rem 1.4rem; animation:fadeUp 0.5s cubic-bezier(0.22,1,0.36,1); }
+.vr-atlas { background:#fff; border:1px solid #E5E7EB; border-radius:12px; padding:1.1rem 1.4rem; }
 .vr-atlas-title { font-size:0.68rem; font-weight:600; color:#1D4ED8; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.85rem; }
 .vr-atlas-section { font-size:0.6rem; font-weight:600; color:#6B7280; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem; }
 .vr-atlas-item { font-size:0.77rem; color:#4B5563; line-height:1.5; padding:0.2rem 0 0.2rem 0.8rem; border-left:2px solid #EEF0F3; margin-bottom:0.25rem; }
-.vr-atlas-item:hover { border-left-color:#1D4ED8; }
 .vr-atlas-ref { font-size:0.6rem; color:#D1D5DB; font-family:'JetBrains Mono',monospace; margin-top:0.7rem; }
-
 .vr-notice { background:#FFFBEB; border:1px solid #FDE68A; border-radius:7px; padding:0.6rem 0.9rem; font-size:0.69rem; color:#92400E; }
-
 .vr-hint { background:#EFF6FF; border:1px solid #DBEAFE; border-radius:9px; padding:0.75rem 0.95rem; font-size:0.73rem; color:#1E40AF; line-height:1.75; margin-bottom:0.75rem; }
 .vr-hint kbd { background:#DBEAFE; padding:1px 6px; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:0.67rem; }
-
 .vr-hist { background:#fff; border:1px solid #F3F4F6; border-radius:9px; padding:0.6rem 0.85rem; margin-bottom:0.45rem; display:flex; justify-content:space-between; align-items:center; }
-.vr-hist:hover { border-color:#DBEAFE; transform:translateX(2px); }
 .vr-hist-age { font-family:'Space Grotesk',sans-serif !important; font-size:0.92rem; font-weight:600; color:#0F1115; }
 .vr-hist-sub { font-size:0.63rem; color:#9CA3AF; font-family:'JetBrains Mono',monospace; }
 .badge-m { background:#EFF6FF; color:#1D4ED8; font-size:0.58rem; font-weight:700; padding:2px 7px; border-radius:4px; }
 .badge-f { background:#FDF4FF; color:#9333EA; font-size:0.58rem; font-weight:700; padding:2px 7px; border-radius:4px; }
-
 .vr-ph { background:#FAFBFC; border:1.5px dashed #D1D5DB; border-radius:14px; height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#CBD5E1; gap:12px; }
-
-div[data-testid="stSelectbox"] label, div[data-testid="stTextInput"] label, div[data-testid="stFileUploader"] label { display:none !important; }
-.stButton > button { border-radius:9px !important; font-weight:600 !important; font-size:0.8rem !important; width:100% !important; height:38px !important; transition:all 0.15s !important; }
+div[data-testid="stSelectbox"] label, div[data-testid="stTextInput"] label, div[data-testid="stNumberInput"] label, div[data-testid="stFileUploader"] label { display:none !important; }
+.stButton > button { border-radius:9px !important; font-weight:600 !important; font-size:0.8rem !important; width:100% !important; height:38px !important; }
 .stButton > button[kind="secondary"] { background:#F9FAFB !important; color:#6B7280 !important; border:1px solid #E5E7EB !important; }
-.stButton > button[kind="secondary"]:hover { background:#F3F4F6 !important; color:#374151 !important; }
 div[data-testid="stFileUploader"] { padding:0.25rem !important; }
 div[data-testid="stImage"] img { border-radius:10px; border:1px solid #E5E7EB; }
+.vr-field-lbl { font-size:0.62rem; font-weight:600; color:#6B7280; margin-bottom:3px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -325,9 +294,17 @@ with col_l:
     st.markdown('<div style="padding:1.1rem 0.5rem 0">', unsafe_allow_html=True)
     st.markdown('<div class="vr-lbl">Dados do paciente</div>', unsafe_allow_html=True)
     sexo = st.selectbox("sexo", ["Masculino", "Feminino"], label_visibility="collapsed")
-    idade_cron = st.text_input("ic", placeholder="Idade cronologica (ex: 8, 6)", label_visibility="collapsed")
 
-    st.markdown('<div class="vr-hint"><b>Como capturar:</b><br>1. No PACS, maximize a radiografia<br>2. Pressione <kbd>Win + Shift + S</kbd><br>3. Selecione <b>so a mao e o punho</b><br>4. Clique em Colar abaixo</div>', unsafe_allow_html=True)
+    st.markdown('<div class="vr-field-lbl">Idade cronologica</div>', unsafe_allow_html=True)
+    c_anos, c_meses = st.columns(2)
+    with c_anos:
+        anos_ic = st.number_input("Anos", min_value=0, max_value=20, value=0, step=1, format="%d", key="anos_ic")
+        st.markdown('<div style="font-size:0.55rem;color:#9CA3AF;text-align:center;margin-top:-8px">ANOS</div>', unsafe_allow_html=True)
+    with c_meses:
+        meses_ic = st.number_input("Meses", min_value=0, max_value=11, value=0, step=1, format="%d", key="meses_ic")
+        st.markdown('<div style="font-size:0.55rem;color:#9CA3AF;text-align:center;margin-top:-8px">MESES</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="vr-hint"><b>Como capturar:</b><br>1. No PACS, maximize a radiografia<br>2. Pressione <kbd>Win + Shift + S</kbd><br>3. Selecione a mao e o punho<br>4. Clique em Colar abaixo</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="vr-lbl">Radiografia</div>', unsafe_allow_html=True)
     paste_result = paste_image_button(label="Colar imagem")
@@ -364,7 +341,10 @@ with col_m:
 
 with col_r:
     st.markdown('<div style="padding:1.1rem 0.5rem 0">', unsafe_allow_html=True)
-    ic_meses = parse_ic(idade_cron)
+
+    # Idade cronologica em meses (None se ambos forem 0)
+    total_ic = int(anos_ic)*12 + int(meses_ic)
+    ic_meses = total_ic if total_ic > 0 else None
 
     sexo_int = 1 if sexo == "Masculino" else 0
     ic_para_modelo = ic_meses if ic_meses is not None else 120.0
@@ -372,9 +352,7 @@ with col_r:
     if st.session_state.img_raw and st.session_state.resultado is None:
         try:
             with st.spinner("Analisando..."):
-                st.session_state.resultado = analisar_imagem(
-                    st.session_state.img_raw, sexo_int, ic_para_modelo
-                )
+                st.session_state.resultado = analisar_imagem(st.session_state.img_raw, sexo_int, ic_para_modelo)
                 anos, meses, idm = st.session_state.resultado
                 if not st.session_state.historico or st.session_state.historico[0].get("meses_totais") != idm:
                     st.session_state.historico.insert(0, {"anos":anos,"meses":meses,"sexo":sexo,"horario":datetime.now().strftime("%H:%M"),"meses_totais":idm})
@@ -384,7 +362,6 @@ with col_r:
 
     if st.session_state.resultado:
         anos, meses, idade_meses = st.session_state.resultado
-
         badge_html = ""
         if ic_meses is not None:
             diff = (anos*12+meses) - ic_meses
