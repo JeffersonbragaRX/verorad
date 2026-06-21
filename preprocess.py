@@ -1,17 +1,20 @@
 """
-preprocess.py — Módulo único de pré-processamento VeroRad v2.
-ESTA FUNÇÃO É USADA IDENTICAMENTE NO TREINO E NA INFERÊNCIA.
-Não reescreva a lógica em outro lugar — importe daqui.
+preprocess.py — Modulo unico de pre-processamento VeroRad v2.
+ESTA FUNCAO E USADA IDENTICAMENTE NO TREINO E NA INFERENCIA.
+Nao reescreva a logica em outro lugar — importe daqui.
+
+Modelo v2: entrada = imagem (512) + sexo apenas (meta_dim=1).
+A idade cronologica NAO e usada (removida para evitar data leakage).
 """
 import json
 import numpy as np
 import cv2
 from PIL import Image
 
-# Dimensão de entrada do backbone
-IMG_SIZE = 384
+# Dimensao de entrada do backbone (modelo treinado em 512)
+IMG_SIZE = 512
 
-# Média/desvio ImageNet (3 canais) — backbone ConvNeXt V2 pré-treinado
+# Media/desvio ImageNet (3 canais) — backbone ConvNeXt V2 pre-treinado
 PIXEL_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 PIXEL_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -19,7 +22,7 @@ STATS_FILE = "preprocess_stats.json"
 
 
 def load_stats(path: str = STATS_FILE) -> dict:
-    """Carrega média/desvio do target e da idade cronológica salvos no treino."""
+    """Carrega media/desvio do target salvos no treino."""
     with open(path) as f:
         return json.load(f)
 
@@ -30,7 +33,7 @@ def save_stats(stats: dict, path: str = STATS_FILE) -> None:
 
 
 def _clahe_rgb(img_np: np.ndarray) -> np.ndarray:
-    """Aplica CLAHE no canal L (LAB) para equalização de contraste radiográfico."""
+    """Aplica CLAHE no canal L (LAB) para equalizacao de contraste radiografico."""
     lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     lab[:, :, 0] = clahe.apply(lab[:, :, 0])
@@ -40,30 +43,29 @@ def _clahe_rgb(img_np: np.ndarray) -> np.ndarray:
 def preprocess(
     img,
     sexo: int,
-    idade_cron_meses: float,
+    idade_cron_meses: float = 0.0,
     stats: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Pré-processa imagem + metadados para entrada no modelo.
+    Pre-processa imagem + metadados para entrada no modelo.
 
-    Parâmetros
+    Parametros
     ----------
-    img : PIL.Image ou np.ndarray (H×W×3, uint8)
-        Radiografia já em RGB.
+    img : PIL.Image ou np.ndarray (HxWx3, uint8)
+        Radiografia ja em RGB.
     sexo : int
-        0 = feminino, 1 = masculino  (convenção do dataset RSNA).
+        0 = feminino, 1 = masculino (convencao do dataset RSNA).
     idade_cron_meses : float
-        Idade cronológica em meses.
+        Ignorado no v2 (mantido na assinatura por compatibilidade).
     stats : dict ou None
-        Dict com chaves 'idade_cron_mean', 'idade_cron_std' para normalização.
-        Se None, a idade cronológica é passada sem normalização (usar só no EDA).
+        Ignorado para os metadados no v2 (mantido por compatibilidade).
 
     Retorna
     -------
     img_tensor : np.ndarray  shape (3, IMG_SIZE, IMG_SIZE), float32
         Imagem normalizada, pronta para o modelo (CHW).
-    meta_tensor : np.ndarray  shape (2,), float32
-        [sexo_float, idade_cron_normalizada]
+    meta_tensor : np.ndarray  shape (1,), float32
+        [sexo_float]
     """
     # 1. Garantir ndarray RGB uint8
     if isinstance(img, Image.Image):
@@ -81,17 +83,13 @@ def preprocess(
     # 3. CLAHE
     img = _clahe_rgb(img)
 
-    # 4. Normalização de pixel → float32 em [0,1] → ImageNet stats
+    # 4. Normalizacao de pixel -> float32 em [0,1] -> ImageNet stats
     img = img.astype(np.float32) / 255.0
     img = (img - PIXEL_MEAN) / PIXEL_STD          # HWC
     img = np.transpose(img, (2, 0, 1))             # CHW
 
-    # 5. Metadados
+    # 5. Metadados — APENAS o sexo (meta_dim=1)
     sexo_f = float(sexo)
-    if stats is not None:
-        ic_norm = (idade_cron_meses - stats["idade_cron_mean"]) / (stats["idade_cron_std"] + 1e-8)
-    else:
-        ic_norm = float(idade_cron_meses)
-    meta = np.array([sexo_f, ic_norm], dtype=np.float32)
+    meta = np.array([sexo_f], dtype=np.float32)
 
     return img.astype(np.float32), meta
