@@ -2,43 +2,57 @@ import streamlit as st
 import numpy as np
 import requests
 import os
+import json
 import onnxruntime as ort
 from PIL import Image
 from datetime import datetime
 from streamlit_paste_button import paste_image_button
 from atlas import get_atlas
+from preprocess import preprocess, load_stats
 
-MODEL_FILENAME = "bone_age_model.onnx"
-MODEL_URL = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/main/bone_age_model.onnx"
+# ── Modelo v2 (ConvNeXt V2 + metadados) ──
+MODEL_V2_FILENAME = "bone_age_v2.onnx"
+STATS_V2_FILENAME = "bone_age_v2_stats.json"
+MODEL_V2_URL  = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/main/bone_age_v2.onnx"
+STATS_V2_URL  = "https://huggingface.co/Jeffersonbraga/verorad-bone-age/resolve/main/bone_age_v2_stats.json"
 
 # ─────────────────────────── CORE ───────────────────────────
-def vgg16_preprocess(img_array):
-    img = img_array.astype(np.float32)[:, :, ::-1]
-    img[:, :, 0] -= 103.939
-    img[:, :, 1] -= 116.779
-    img[:, :, 2] -= 123.68
-    return img
+
+def _download_file(url: str, dest: str, label: str) -> None:
+    """Baixa arquivo com barra de progresso."""
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        total = int(r.headers.get('content-length', 0))
+        downloaded = 0
+        progress = st.progress(0, text=f"Baixando {label}...")
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(chunk_size=65536):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total:
+                    progress.progress(int(downloaded / total * 100),
+                                      text=f"Baixando {label}... {int(downloaded/total*100)}%")
+        progress.empty()
+
 
 @st.cache_resource
 def carregar_modelo():
-    if not os.path.exists(MODEL_FILENAME):
-        with st.spinner("Carregando modelo..."):
-            with requests.get(MODEL_URL, stream=True) as r:
-                r.raise_for_status()
-                total = int(r.headers.get('content-length', 0))
-                downloaded = 0
-                progress = st.progress(0, text="Inicializando...")
-                with open(MODEL_FILENAME, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=65536):
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total:
-                            progress.progress(int(downloaded/total*100), text=f"Carregando... {int(downloaded/total*100)}%")
-                progress.empty()
-    if os.path.getsize(MODEL_FILENAME) < 1_000_000:
-        os.remove(MODEL_FILENAME)
-        raise RuntimeError("Arquivo corrompido.")
-    return ort.InferenceSession(MODEL_FILENAME)
+    with st.spinner("Verificando modelo..."):
+        # Baixar ONNX se necessário
+        if not os.path.exists(MODEL_V2_FILENAME):
+            _download_file(MODEL_V2_URL, MODEL_V2_FILENAME, "modelo v2")
+        if os.path.getsize(MODEL_V2_FILENAME) < 1_000_000:
+            os.remove(MODEL_V2_FILENAME)
+            raise RuntimeError("Arquivo ONNX corrompido.")
+
+        # Baixar stats se necessário
+        if not os.path.exists(STATS_V2_FILENAME):
+            _download_file(STATS_V2_URL, STATS_V2_FILENAME, "stats")
+
+    session = ort.InferenceSession(MODEL_V2_FILENAME, providers=["CPUExecutionProvider"])
+    stats = load_stats(STATS_V2_FILENAME)
+    return session, stats
+
 
 def autocrop(img):
     gray = np.array(img.convert('L')).astype(np.float32)
@@ -59,42 +73,29 @@ def autocrop(img):
         return cropped
     return img
 
-def _infer_single(session, input_name, pil_img):
-    """Inferência em uma única variante já redimensionada para 384x384."""
-    arr = np.array(pil_img.resize((384, 384), Image.LANCZOS)).astype(np.float32)
-    batch = np.expand_dims(vgg16_preprocess(arr), axis=0)
-    out = session.run(None, {input_name: batch})
-    return max(0, float(out[0][0][0]))
 
-def analisar_imagem(img, usar_tta=False):
-    session = carregar_modelo()
-    input_name = session.get_inputs()[0].name
+def analisar_imagem(img, sexo_int: int, idade_cron_meses: float):
+    """
+    Roda inferência com o modelo v2 (imagem + sexo + idade cronológica).
+    sexo_int : 0 = Feminino, 1 = Masculino
+    idade_cron_meses : idade cronológica em meses
+    """
+    session, stats = carregar_modelo()
     base = autocrop(img)
 
-    if not usar_tta:
-        idade_meses = _infer_single(session, input_name, base)
-    else:
-        # Gera variantes leves da mesma imagem e tira a mediana (robusta a outliers)
-        variantes = [
-            base,                                              # original
-            base.transpose(Image.FLIP_LEFT_RIGHT),             # espelhada
-            base.rotate(5, resample=Image.BILINEAR, fillcolor=0),   # +5°
-            base.rotate(-5, resample=Image.BILINEAR, fillcolor=0),  # -5°
-        ]
-        # Zoom leve (corta 4% das bordas)
-        w, h = base.size
-        m = int(min(w, h) * 0.04)
-        if w - 2*m > 10 and h - 2*m > 10:
-            variantes.append(base.crop((m, m, w - m, h - m)))
+    img_t, meta_t = preprocess(base, sexo_int, idade_cron_meses, stats=stats)
+    img_batch  = img_t[np.newaxis, ...]   # (1, 3, H, W)
+    meta_batch = meta_t[np.newaxis, ...]  # (1, 2)
 
-        previsoes = [_infer_single(session, input_name, v) for v in variantes]
-        idade_meses = float(np.median(previsoes))
+    out_norm = session.run(None, {"image": img_batch, "meta": meta_batch})[0][0]
+    bone_age = float(out_norm) * stats["boneage_std"] + stats["boneage_mean"]
+    bone_age = float(np.clip(bone_age, 0, 228))
 
-    anos = int(idade_meses // 12)
-    meses = int(round(idade_meses % 12))
+    anos = int(bone_age // 12)
+    meses = int(round(bone_age % 12))
     if meses == 12:
         anos += 1; meses = 0
-    return anos, meses, idade_meses
+    return anos, meses, bone_age
 
 def parse_ic(idade_cron):
     if not idade_cron or "," not in idade_cron:
@@ -309,10 +310,16 @@ with col_r:
     st.markdown('<div style="padding:1.1rem 0.5rem 0">', unsafe_allow_html=True)
     ic_meses = parse_ic(idade_cron)
 
+    sexo_int = 1 if sexo == "Masculino" else 0
+    # Usar IC em meses se disponível, senão usar 120 (10 anos) como placeholder
+    ic_para_modelo = ic_meses if ic_meses is not None else 120.0
+
     if st.session_state.img_raw and st.session_state.resultado is None:
         try:
             with st.spinner("Analisando..."):
-                st.session_state.resultado = analisar_imagem(st.session_state.img_raw)
+                st.session_state.resultado = analisar_imagem(
+                    st.session_state.img_raw, sexo_int, ic_para_modelo
+                )
                 anos, meses, idm = st.session_state.resultado
                 if not st.session_state.historico or st.session_state.historico[0].get("meses_totais") != idm:
                     st.session_state.historico.insert(0, {"anos":anos,"meses":meses,"sexo":sexo,"horario":datetime.now().strftime("%H:%M"),"meses_totais":idm})

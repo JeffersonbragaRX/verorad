@@ -4,3 +4,12 @@ Pillow
 numpy
 requests
 streamlit-paste-button
+opencv-python-headless
+timm
+torch
+torchvision
+albumentations
+scikit-learn
+pandas
+onnx
+matplotlib
