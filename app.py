@@ -65,7 +65,8 @@ def carregar_modelo():
 
 def autocrop(img):
     """
-    Isola UMA mao. Se houver duas maos separadas, usa a da esquerda da imagem.
+    Isola UMA mao. Busca pixels de tecido/osso (faixa 35-250), ignorando
+    fundo preto E moldura branca. Se houver duas maos, usa a da esquerda.
     Em qualquer erro, retorna a imagem original.
     """
     if not _HAS_CV2:
@@ -75,44 +76,30 @@ def autocrop(img):
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         h, w = gray.shape
 
-        cantos = [gray[0,0], gray[0,-1], gray[-1,0], gray[-1,-1]]
-        fundo_escuro = np.mean(cantos) < 110
+        # Mascara: tecido/osso = nem fundo preto (<35) nem branco de moldura (>250)
+        mask = ((gray > 35) & (gray < 250)).astype(np.uint8) * 255
 
-        blur = cv2.GaussianBlur(gray, (5,5), 0)
-        if fundo_escuro:
-            _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        else:
-            _, mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=3)
 
         num, labels, stats_cc, cent = cv2.connectedComponentsWithStats(mask, connectivity=8)
         if num <= 1:
             return _autocrop_legado(img)
 
-        # Componentes ordenados por area (do maior pro menor), ignorando fundo
+        area_total = h * w
         comps = []
         for i in range(1, num):
-            area = stats_cc[i, cv2.CC_STAT_AREA]
-            comps.append((i, area))
+            comps.append((i, stats_cc[i, cv2.CC_STAT_AREA]))
         comps.sort(key=lambda t: t[1], reverse=True)
 
-        area_total = h * w
-        # Candidatos "mao" = componentes grandes (>8% da imagem)
-        grandes = [c for c in comps if c[1] > area_total * 0.08]
-
+        grandes = [c for c in comps if c[1] > area_total * 0.06]
         if len(grandes) == 0:
             return _autocrop_legado(img)
 
         if len(grandes) >= 2:
-            # Provavelmente duas maos: escolher a mais a ESQUERDA da imagem
-            g0 = grandes[0][0]
-            g1 = grandes[1][0]
-            cx0 = cent[g0][0]
-            cx1 = cent[g1][0]
-            escolhido = g0 if cx0 <= cx1 else g1
+            g0, g1 = grandes[0][0], grandes[1][0]
+            escolhido = g0 if cent[g0][0] <= cent[g1][0] else g1
         else:
             escolhido = grandes[0][0]
 
@@ -121,8 +108,8 @@ def autocrop(img):
         bw = stats_cc[escolhido, cv2.CC_STAT_WIDTH]
         bh = stats_cc[escolhido, cv2.CC_STAT_HEIGHT]
 
-        pad_x = max(10, int(bw*0.05))
-        pad_y = max(10, int(bh*0.05))
+        pad_x = max(10, int(bw * 0.05))
+        pad_y = max(10, int(bh * 0.05))
         x0 = max(0, x - pad_x)
         y0 = max(0, y - pad_y)
         x1 = min(w, x + bw + pad_x)
