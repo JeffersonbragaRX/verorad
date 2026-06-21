@@ -146,6 +146,7 @@ def _autocrop_legado(img):
 def analisar_imagem(img, sexo_int, idade_cron_meses):
     session, stats = carregar_modelo()
     base = autocrop(img)
+    st.session_state.img_crop = base  # guarda o recorte para preview
     img_t, meta_t = preprocess(base, sexo_int, idade_cron_meses, stats=stats)
     img_batch  = img_t[np.newaxis, ...]
     meta_batch = meta_t[np.newaxis, ...]
@@ -213,7 +214,7 @@ def render_timeline(io_meses, ic_meses=None):
 
 st.set_page_config(page_title="VeroRad | Bone Age AI", page_icon="x", layout="wide")
 
-for k, v in [("historico", []), ("img_raw", None), ("resultado", None)]:
+for k, v in [("historico", []), ("img_raw", None), ("resultado", None), ("img_crop", None)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -305,6 +306,7 @@ with col_l:
     if nova_img is not None:
         st.session_state.img_raw = nova_img
         st.session_state.resultado = None
+        st.session_state.img_crop = None
 
     if st.session_state.historico:
         st.markdown('<div class="vr-lbl" style="margin-top:1.5rem">Historico da sessao</div>', unsafe_allow_html=True)
@@ -322,6 +324,9 @@ with col_m:
     st.markdown('<div class="vr-lbl">Radiografia carregada</div>', unsafe_allow_html=True)
     if st.session_state.img_raw:
         st.image(st.session_state.img_raw, use_container_width=True)
+        if st.session_state.get("img_crop") is not None:
+            st.markdown('<div class="vr-lbl" style="margin-top:1rem">Recorte usado pela IA (autocrop)</div>', unsafe_allow_html=True)
+            st.image(st.session_state.img_crop, use_container_width=True)
     else:
         st.markdown('<div class="vr-ph"><div style="font-size:0.78rem">Nenhuma imagem carregada</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
