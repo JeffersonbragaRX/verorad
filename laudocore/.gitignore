@@ -1,0 +1,18 @@
+# Corpus real e qualquer derivado com dado clinico/patient_id em texto claro
+# nunca vai para o Git (ver docs/decisions/0002-dados-fora-do-git.md).
+data/raw/
+data/staging/
+data/processed/
+
+# derived/qa/ eh intencionalmente commitado (apenas estatisticas agregadas)
+!data/derived/
+data/derived/*
+!data/derived/qa/
+data/derived/qa/*
+!data/derived/qa/QA_REPORT.json
+!data/derived/qa/exam_types.csv
+!data/derived/qa/physicians.csv
+
+__pycache__/
+*.pyc
+.pytest_cache/

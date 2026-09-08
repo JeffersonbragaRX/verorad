@@ -1,0 +1,8 @@
+doctor,total,by_modality,by_domain
+NEY,2245,"{""RM"": 1286, ""TC"": 187, ""RX"": 772}","{""MSK"": 1951, ""CABECA_PESCOCO"": 101, ""NEURO"": 62, ""ABDOME"": 9, ""INDEFINIDO"": 3, ""TORAX"": 105, ""VASCULAR"": 11, ""PELVE_GU"": 3}"
+SERGIO,1748,"{""RM"": 709, ""TC"": 1039}","{""ABDOME"": 591, ""PELVE_GU"": 340, ""MSK"": 24, ""CARDIO"": 219, ""TORAX"": 357, ""VASCULAR"": 25, ""CABECA_PESCOCO"": 184, ""NEURO"": 8}"
+RAFAEL,1528,"{""RM"": 1048, ""TC"": 93, ""RX"": 387}","{""MSK"": 1517, ""NEURO"": 4, ""TORAX"": 6, ""PELVE_GU"": 1}"
+JULIANA,1335,"{""RM"": 1051, ""TC"": 284}","{""MSK"": 571, ""NEURO"": 722, ""CABECA_PESCOCO"": 42}"
+CAIO,977,"{""RM"": 708, ""TC"": 89, ""RX"": 180}","{""MSK"": 967, ""TORAX"": 8, ""NEURO"": 1, ""INDEFINIDO"": 1}"
+SAMIR,522,"{""RM"": 501, ""TC"": 20, ""RX"": 1}","{""MSK"": 349, ""PELVE_GU"": 120, ""NEURO"": 38, ""INDEFINIDO"": 13, ""TORAX"": 2}"
+SAMIRA,47,"{""RM"": 47}","{""MAMA"": 47}"
