@@ -10,6 +10,7 @@ data/derived/*
 !data/derived/qa/
 data/derived/qa/*
 !data/derived/qa/QA_REPORT.json
+!data/derived/qa/QA_REPORT_FASE1.json
 !data/derived/qa/exam_types.csv
 !data/derived/qa/physicians.csv
 

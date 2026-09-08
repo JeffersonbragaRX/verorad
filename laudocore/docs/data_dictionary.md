@@ -52,6 +52,37 @@ distintos — o mais recente (18:47) contém os anteriores. O baseline usa
 apenas o mais recente; os demais ficam em `data/raw/` como histórico, sem
 uso analítico.
 
+## Cabeçalhos observados por médico (vertical RM_JOELHO_D/RM_JOELHO_E)
+
+Levantamento empírico sobre os 911 laudos do vertical piloto (Fase 1),
+usado para construir `backend/parsers/section_parser.py`. Nenhuma
+estrutura foi assumida — cada padrão abaixo foi contado no corpus real
+antes de virar regra de parsing.
+
+| Médico | Indicação | Técnica | Achados | Impressão | Comparação | Observação estrutural |
+|---|---|---|---|---|---|---|
+| CAIO (177) | 99,4% | 100% | 100% | 100% | 0,6% | `CABEÇALHO: conteúdo` na mesma linha (`INFORMAÇÕES CLÍNICAS: dor.`) |
+| RAFAEL (295) | 100% | 100% | 100% | 100% | 4,7% | Mesmo estilo inline de CAIO |
+| NEY (368) | 92,1% | 100% | 100% | 100% | 11,4% | Cabeçalho isolado em linha própria (`INDICAÇÃO CLÍNICA:` seguido de conteúdo na(s) linha(s) seguinte(s)); único a usar `ANÁLISE COMPARATIVA:` com regularidade |
+| SAMIR (71) | 4,2% | 100% | 100% | **4,2%** | 0% | Estrutura distinta: `TÉCNICA DE EXAME:` / `OS SEGUINTES ASPECTOS FORAM OBSERVADOS:`; **não separa impressão do corpo do laudo na maioria dos casos** — isso é um traço real do estilo de ditado dele, não uma falha do parser |
+
+Descoberta relevante: um mesmo rótulo textual (`INFORMAÇÕES CLÍNICAS`,
+`TÉCNICA`) pode aparecer **isolado em sua própria linha** (NEY, SAMIR)
+ou **combinado com o conteúdo na mesma linha** (CAIO, RAFAEL). O parser
+trata os dois formatos; um parser ingênuo que só reconhece cabeçalho
+isolado subestimaria drasticamente a cobertura de CAIO/RAFAEL (medido:
+0% de "técnica" antes da correção, 100% depois).
+
+Também aparece, em ~9% dos laudos de NEY, uma linha solta de código
+CID/ICD-10 (`CID M25.5`, e variantes de digitação `CDI`/`CIS`) logo
+após o cabeçalho de indicação — tratada como conteúdo da própria seção
+de indicação, não como um cabeçalho novo.
+
+Cabeçalhos residuais não mapeados (3 ocorrências em 911 laudos,
+mantidos como seção `other` para revisão manual, não classificados por
+adivinhação): `ACHADO ADICIONAL:`, `ACHADOS ADICIONAIS:`,
+`REFERÊNCIA BIBLIOGRÁFICA:`.
+
 ## Pendência conhecida
 
 `US` (ultrassonografia) está no escopo do manifest mas sem registros neste

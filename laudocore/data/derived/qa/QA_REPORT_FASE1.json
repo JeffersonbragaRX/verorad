@@ -1,0 +1,67 @@
+{
+  "generated_at": "2026-09-08T00:35:57.688558+00:00",
+  "vertical": [
+    "RM_JOELHO_D",
+    "RM_JOELHO_E"
+  ],
+  "snapshot_used": "CMS_CORPUS_2026-06-06_A_2026-09-06_2026-09-07T18-47-50-654Z",
+  "totals": {
+    "reports_ingested": 911,
+    "sentences_extracted": 20498,
+    "sentences_per_report": {
+      "min": 11,
+      "max": 48,
+      "mean": 22.5
+    }
+  },
+  "section_coverage_by_doctor": {
+    "CAIO": {
+      "total_reports": 177,
+      "pct_with_indication": 99.4,
+      "pct_with_technique": 100.0,
+      "pct_with_findings": 100.0,
+      "pct_with_impression": 100.0,
+      "pct_with_comparison": 0.6
+    },
+    "RAFAEL": {
+      "total_reports": 295,
+      "pct_with_indication": 100.0,
+      "pct_with_technique": 100.0,
+      "pct_with_findings": 100.0,
+      "pct_with_impression": 100.0,
+      "pct_with_comparison": 4.7
+    },
+    "NEY": {
+      "total_reports": 368,
+      "pct_with_indication": 92.1,
+      "pct_with_technique": 100.0,
+      "pct_with_findings": 100.0,
+      "pct_with_impression": 100.0,
+      "pct_with_comparison": 11.4
+    },
+    "SAMIR": {
+      "total_reports": 71,
+      "pct_with_indication": 4.2,
+      "pct_with_technique": 100.0,
+      "pct_with_findings": 100.0,
+      "pct_with_impression": 4.2,
+      "pct_with_comparison": 0.0
+    }
+  },
+  "unmatched_header_candidates": {
+    "ACHADO ADICIONAL:": 1,
+    "ACHADOS ADICIONAIS:": 1,
+    "REFERÊNCIA BIBLIOGRÁFICA:": 1
+  },
+  "unmatched_header_total_occurrences": 3,
+  "report_level_duplicates": {
+    "note": "Informativo — NAO removido. Mesmo texto pode corresponder a exames reais distintos (ex.: laudo padrao de normalidade).",
+    "exact_groups": 0,
+    "exact_records": 0
+  },
+  "sentence_level_duplicates": {
+    "note": "Informativo — frases identicas entre laudos sao esperadas (vocabulario padronizado) e serao a base da biblioteca de frases na Fase 3, nao um defeito de qualidade.",
+    "exact_groups": 1878,
+    "exact_records": 17288
+  }
+}

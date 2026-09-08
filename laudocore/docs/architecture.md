@@ -1,28 +1,56 @@
-# ARCHITECTURE — LaudoCore (estado no fim da Fase 0)
+# ARCHITECTURE — LaudoCore (estado no fim da Fase 1)
 
 ## O que existe hoje
 
-Apenas a camada de auditoria de dados. Nenhum banco, API, frontend ou
-LLM foi implementado ainda — deliberadamente. Ver
+Auditoria de dados (Fase 0) + Data Engine restrito a um vertical único
+(Fase 1: RM_JOELHO_D + RM_JOELHO_E, 911 laudos). Nenhuma API, frontend,
+retrieval ou LLM foi implementado ainda — deliberadamente. Ver
 `docs/decisions/0001-fase0-antes-de-infra.md`.
 
 ```text
 laudocore/
 ├── docs/
 │   ├── architecture.md          (este arquivo)
-│   ├── data_dictionary.md       (schema real do export RAW)
-│   ├── BASELINE_REPORT.md       (saida do baseline, gerada por script)
+│   ├── data_dictionary.md       (schema RAW + cabecalhos por medico)
+│   ├── BASELINE_REPORT.md       (saida da Fase 0)
 │   └── decisions/                (ADRs)
 ├── data/
 │   ├── raw/                      (corpus original — FORA do git, ver ADR 0002)
-│   ├── staging/                  (vazio — Fase 1)
-│   ├── processed/                (vazio — Fase 1)
-│   └── derived/qa/                (saidas do baseline: QA_REPORT.json, exam_types.csv, physicians.csv)
+│   ├── staging/                  (vazio — reservado)
+│   ├── processed/                (laudocore.db, SQLite — FORA do git, ver ADR 0002/0004)
+│   └── derived/qa/                (QA_REPORT.json, QA_REPORT_FASE1.json, exam_types.csv, physicians.csv)
+├── backend/
+│   ├── normalization/text_normalization.py   (RAW -> clean -> normalized, hashes A/B)
+│   ├── parsers/section_parser.py             (secoes, orientado a dados por medico)
+│   ├── parsers/sentence_parser.py            (sentencas por secao)
+│   └── db/schema.py                          (schema SQLite — reports/report_sections/sentences)
 ├── scripts/
-│   └── baseline_audit.py         (Fase 0: le RAW, recalcula, valida, gera relatorios)
+│   ├── baseline_audit.py         (Fase 0)
+│   └── ingest_vertical.py        (Fase 1: ingestao do vertical piloto, comando unico, idempotente)
 └── tests/
-    └── test_baseline_audit.py    (criterio de aceite da Fase 0)
+    ├── test_baseline_audit.py
+    ├── test_normalization.py
+    ├── test_section_parser.py
+    ├── test_sentence_parser.py
+    └── test_ingest_vertical.py   (integracao — requer corpus local, ver skip condicional)
 ```
+
+## Fase 1 — o que o parser aprendeu com os dados reais
+
+O parser de seções não usa um único conjunto de cabeçalhos: cada
+médico do vertical piloto escreve de forma diferente (ver
+`docs/data_dictionary.md`, "Cabeçalhos observados por médico"). Dois
+achados mudaram o design em relação à primeira versão do parser:
+
+1. Cabeçalho e conteúdo podem estar na mesma linha (`TÉCNICA: texto…`)
+   ou em linhas separadas — dependendo do médico. Um parser que só
+   reconhece uma das formas subestima silenciosamente a cobertura de
+   metade dos médicos (medido: 0% → 100% de cobertura de "técnica"
+   para CAIO antes/depois da correção).
+2. Ausência de seção pode ser um traço real de estilo (SAMIR não separa
+   "impressão" do corpo do laudo em 95,8% dos casos) — o parser não
+   fabrica uma seção que não existe no texto; isso fica registrado como
+   dado, não como falha de parsing.
 
 ## Decisão de escopo em relação à ESPECIFICACAO_MESTRA original
 
