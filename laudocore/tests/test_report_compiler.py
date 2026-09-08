@@ -179,6 +179,12 @@ class TestReportCompiler(unittest.TestCase):
         result = compile_report(self.conn, reqs, phrase_bank=self.bank)
         self.assertTrue(any("CONTRADIÇÃO" in w for w in result.warnings))
 
+    def test_duplicate_request_raises_warning_and_is_not_compiled_twice(self):
+        req = FindingRequest("meniscus_lateral", "tear", "absent")
+        result = compile_report(self.conn, [req, req], phrase_bank=self.bank)
+        self.assertTrue(any("DUPLICIDADE" in w for w in result.warnings))
+        self.assertEqual(len(result.findings_lines), 1)
+
     def test_auditor_flags_impression_structure_absent_from_findings(self):
         # Simula um bug hipotetico de montagem: impressao citando algo
         # que nao esta nos achados — o auditor deve capturar isso.
@@ -205,6 +211,28 @@ class TestReportCompiler(unittest.TestCase):
         result = compile_report(self.conn, [], phrase_bank=self.bank)
         self.assertNotIn("INDICAÇÃO", result.render())
         self.assertIn("INDICAÇÃO", result.render(indication_text="Dor no joelho."))
+
+
+class TestPhraseBankEntries(unittest.TestCase):
+    """entries() alimenta a biblioteca de achados pesquisavel da API/UI."""
+
+    def setUp(self):
+        self.conn = _build_seeded_db()
+        self.bank = build_phrase_bank(self.conn)
+
+    def test_entries_cover_all_seeded_combinations(self):
+        entries = self.bank.entries()
+        keys = {(e["structure"], e["finding"], e["status"], e["section_type"]) for e in entries}
+        self.assertIn(("meniscus_lateral", "tear", "absent", "findings"), keys)
+        self.assertIn(("meniscus_medial", "tear", "present", "findings"), keys)
+        self.assertIn(("meniscus_medial", "tear", "present", "impression"), keys)
+
+    def test_entry_carries_example_text_and_doctor(self):
+        entries = self.bank.entries()
+        entry = next(e for e in entries if e["structure"] == "meniscus_lateral" and e["finding"] == "tear")
+        self.assertEqual(entry["example_text"], "Menisco lateral sem evidências de lesões.")
+        self.assertIn("NEY", entry["doctors"])
+        self.assertEqual(entry["frequency"], 1)
 
 
 if __name__ == "__main__":

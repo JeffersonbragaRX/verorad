@@ -102,6 +102,28 @@ class PhraseBank:
                 return result, key
         return None, None
 
+    def entries(self) -> list[dict]:
+        """Enumera todas as combinacoes conhecidas — usado pela API
+        para alimentar a biblioteca de achados pesquisavel. Cada
+        entrada traz a frase mais representativa (via lookup) e
+        metadados agregados (frequencia total, medicos que a usaram)."""
+        out = []
+        for key, buckets in self._by_key.items():
+            combined = buckets[True] + buckets[False]
+            if not combined:
+                continue
+            total_freq = sum(combined.values())
+            doctors = sorted({doctor for doctor, _text in combined})
+            example = self.lookup(key)
+            structure, finding, status, severity, location, section_type = key
+            out.append({
+                "structure": structure, "finding": finding, "status": status,
+                "severity": severity, "location": location, "section_type": section_type,
+                "example_text": example.text if example else "",
+                "frequency": total_freq, "doctors": doctors,
+            })
+        return out
+
 
 def build_phrase_bank(conn: sqlite3.Connection) -> PhraseBank:
     bank = PhraseBank()

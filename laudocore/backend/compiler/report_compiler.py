@@ -92,6 +92,7 @@ class CompileResult:
 def _validate_no_contradictions(findings: list[FindingRequest]) -> list[str]:
     warnings = []
     seen: dict[tuple, str] = {}
+    seen_exact: dict[tuple, int] = {}
     for f in findings:
         base = (f.structure, f.finding)
         if base in seen and seen[base] != f.status:
@@ -100,6 +101,15 @@ def _validate_no_contradictions(findings: list[FindingRequest]) -> list[str]:
                 f"'{seen[base]}' e também como '{f.status}' na mesma requisição."
             )
         seen[base] = f.status
+
+        exact_key = f.key()
+        seen_exact[exact_key] = seen_exact.get(exact_key, 0) + 1
+        if seen_exact[exact_key] == 2:  # avisa uma unica vez, na segunda ocorrencia
+            warnings.append(
+                f"DUPLICIDADE: '{f.structure}/{f.finding}' ({f.status}"
+                f"{', ' + f.severity if f.severity else ''}"
+                f"{', ' + f.location if f.location else ''}) foi solicitado mais de uma vez."
+            )
     return warnings
 
 
@@ -132,7 +142,17 @@ def compile_report(
 
     warnings = _validate_no_contradictions(findings)
 
-    ordered = sorted(findings, key=lambda f: _structure_sort_key(f.structure))
+    # duplicidade exata ja foi sinalizada acima — nao compila a mesma
+    # linha duas vezes no laudo, so a primeira ocorrencia conta.
+    seen_keys: set[tuple] = set()
+    deduplicated = []
+    for f in findings:
+        if f.key() in seen_keys:
+            continue
+        seen_keys.add(f.key())
+        deduplicated.append(f)
+
+    ordered = sorted(deduplicated, key=lambda f: _structure_sort_key(f.structure))
 
     result = CompileResult(technique_text=_pick_technique_text(conn, doctor), warnings=warnings)
 
