@@ -1,181 +1,104 @@
 # LaudoCore (provisório)
 
-Laudador inteligente geral de Radiologia e Diagnóstico por Imagem —
-escopo inicial RM, TC e RX, arquitetura baseada em corpus real +
-conhecimento médico canônico + perfil de redação por médico + retrieval
-híbrido + regras determinísticas + auditoria clínica + LLM controlado
-(nunca a fonte única de verdade clínica).
+Laudador radiológico assistido — vertical piloto: **RM de joelho**
+(`RM_JOELHO_D` / `RM_JOELHO_E`). Corpus real → regras determinísticas
+→ reuso de frase real → interface. **Sem LLM em nenhuma etapa desta
+entrega** — nenhum texto é gerado livremente; o sistema escolhe entre
+frases que médicos reais já escreveram, ou sinaliza que não sabe.
 
 Este diretório vive dentro do repositório `verorad`, que também contém
-um produto não relacionado (estimador de idade óssea). Ver
-`docs/decisions/0003-local-do-repositorio.md` para o porquê e como
-migrar para um repositório dedicado se desejado.
+um produto não relacionado (estimador de idade óssea) — ver
+`docs/decisions/0003-local-do-repositorio.md`.
 
-## Estado atual: mini-eval de fidelidade textual concluída (Fase 4 + Fase 6)
-
-Amostra estratificada de 86 sentenças reais (2 por regra de extração,
-cobrindo as 43 regras distintas), lida item a item — **por mim
-(Claude), não por um radiologista**: o que foi verificado é fidelidade
-textual (o conceito extraído representa exatamente o que a frase diz),
-não correção clínica plena. Ver `docs/decisions/0007` para a
-metodologia completa e essa distinção.
-
-**4 bugs de precisão real encontrados e corrigidos**, cada um com
-evidência do texto real que os expôs:
-
-1. "Verticalizado" sozinho estava sendo tratado como sinônimo de
-   degeneração (25 ocorrências afetadas no corpus).
-2. "Rotura praticamente completa" era relatada com gravidade "completa"
-   pura, superestimando o achado (17 ocorrências).
-3. Compartimento específico ("femorotibial medial") gerava um segundo
-   conceito redundante e genérico ("femorotibial não especificado")
-   pela mesma menção (12 ocorrências).
-4. Ligamentos colaterais: espessamento/degeneração intersticial real
-   era suprimido sempre que a rotura aguda era negada na mesma frase
-   (mesma classe de bug já corrigida em menisco e cruzados na Fase 6).
-
-Todos com teste de regressão, confirmados corrigidos contra o corpus
-real (74 testes passando, 11 novos). Limitações remanescentes
-(variantes de acentuação/hífen não reconhecidas, faixas de grau
-truncadas, construções coordenadas com elisão) documentadas, não
-corrigidas — são lacunas de recall, informação omitida, não
-informação errada.
+## Rodar
 
 ```bash
-python3 scripts/extract_concepts.py && python3 scripts/compile_report_demo.py
-```
-
-## Estado anterior: Fase 6 concluída (Report Compiler, vertical piloto)
-
-Compila um laudo a partir de achados que o médico já decidiu
-(`FindingRequest`: estrutura, achado, status, gravidade, localização)
-— o compilador **escolhe a frase real do corpus**, nunca gera prosa
-livre (sem LLM ainda nesta fase). Se não houver frase real para a
-combinação pedida, o achado fica sinalizado como `unresolved`, nunca é
-preenchido com texto genérico.
-
-- técnica, achados e impressão montados a partir de frases reais,
-  rastreáveis até o médico de origem
-- auditor leve embutido: sinaliza contradições no pedido (mesma
-  estrutura pedida como presente e ausente) e qualquer estrutura que
-  apareça na impressão sem estar nos achados
-- **bug de precisão real encontrado e corrigido durante o
-  desenvolvimento**: um achado "menisco lateral sem rotura" estava
-  sendo resolvido com uma frase real que também afirmava degeneração
-  (informação não pedida) — causa raiz era um extrator da Fase 4 que
-  tratava rotura e degeneração como mutuamente exclusivas quando são
-  eixos clínicos independentes. Corrigido, com teste de regressão. Ver
-  `docs/decisions/0006-report-compiler-reuso-de-frase-real.md`
-- **limitação estrutural reconhecida, não eliminada**: reuso de frase
-  real não garante que a frase contém *apenas* o que foi pedido —
-  todo laudo compilado por esta camada é um rascunho e exige revisão
-  integral do médico antes do uso
-
-```bash
-python3 scripts/compile_report_demo.py   # requer ingest_vertical.py e extract_concepts.py já rodados
-```
-
-## Estado anterior: Fase 4 concluída (Clinical Concept Layer, vertical piloto)
-
-Extração de conceitos clínicos estruturados (estrutura, achado, status,
-gravidade, localização, medida) a partir das sentenças de
-achados/impressão do vertical — **100% por regras/regex, sem LLM**
-(`backend/clinical/knee_concepts.py`), com `rule_id` rastreável em
-cada conceito.
-
-- 14.675 conceitos extraídos de 18.597 sentenças
-- 56,7% das sentenças produzem pelo menos um conceito (cobertura
-  aproximada de recall — **não é medida de precisão**, ver ressalva
-  abaixo)
-- 1 bug real de precisão encontrado e corrigido durante o
-  desenvolvimento (via revisão manual de amostra): confusão entre o
-  osso "patela" e o tendão "patelar" por match de substring
-- **sem gold standard ainda**: não há conjunto de avaliação anotado
-  manualmente para medir precisão real — ver
-  `docs/decisions/0005-clinical-concept-layer-por-regras.md`
-
-```bash
-python3 scripts/extract_concepts.py   # requer ingest_vertical.py já rodado
-```
-
-## Estado anterior: Fase 1 concluída (vertical piloto)
-
-Vertical piloto: **RM de joelho** (`RM_JOELHO_D` + `RM_JOELHO_E`, 911
-laudos, MSK — subespecialidade do usuário). Pipeline completo de
-ponta a ponta: normalização (RAW/clean/normalized) → hashes A/B →
-section parser (orientado pelos cabeçalhos reais de cada um dos 4
-médicos do vertical) → sentence parser → persistência em SQLite.
-
-- 911 laudos ingeridos, 20.498 sentenças extraídas
-- `technique` e `findings` presentes em 100% dos laudos dos 4 médicos
-- `indication`/`impression` variam por médico — inclusive um médico
-  (SAMIR) que genuinamente não separa impressão do corpo do laudo em
-  95,8% dos casos; o parser não inventa uma seção que não existe
-- apenas 3 cabeçalhos em 911 laudos não reconhecidos automaticamente
-  (deixados para revisão manual, não classificados por adivinhação)
-- pipeline idempotente (mesmo resultado em execuções repetidas) e
-  testado (23 testes novos, além dos 6 da Fase 0)
-
-Detalhes: `docs/data_dictionary.md` (seção "Cabeçalhos observados por
-médico") e `data/derived/qa/QA_REPORT_FASE1.json`.
-
-```bash
+# uma vez, com o corpus em data/raw/ (fora do git — ver ADR 0002):
 python3 scripts/ingest_vertical.py
-python3 -m unittest discover -s tests -v
+python3 scripts/extract_concepts.py
+
+# a cada uso:
+./run.sh
 ```
 
-## Estado anterior: Fase 0 concluída
+Abra `http://localhost:8000`. `run.sh` instala dependências na
+primeira vez, builda a interface e sobe tudo (API + interface) num
+único processo. Sem internet exigida em tempo de execução.
 
-Auditoria estrutural do corpus recebido (`TCRMRX.zip`, export CMS,
-janela 2026-06-06 a 2026-09-06, RM+TC+RX — US ainda pendente de
-exportação). Nenhuma linha do corpus foi descartada silenciosamente;
-toda estatística foi recalculada de forma independente a partir do
-JSONL bruto e cruzada contra os números que o próprio export já trazia.
+Requisitos: Python 3.11+, Node.js 18+. Nada além disso — todo o
+armazenamento é local (SQLite em `data/processed/laudocore.db`, fora
+do Git).
 
-Entregáveis:
+## O que existe hoje
 
-- [`docs/BASELINE_REPORT.md`](docs/BASELINE_REPORT.md) — relatório legível
-- [`data/derived/qa/QA_REPORT.json`](data/derived/qa/QA_REPORT.json) — auditoria estruturada completa
-- [`data/derived/qa/exam_types.csv`](data/derived/qa/exam_types.csv) — 210 exam_type distintos
-- [`data/derived/qa/physicians.csv`](data/derived/qa/physicians.csv) — 7 médicos
-- [`docs/data_dictionary.md`](docs/data_dictionary.md) — schema real observado
-- [`docs/architecture.md`](docs/architecture.md) — estado da arquitetura
-- `docs/decisions/` — decisões registradas (ADRs)
+| Camada | Descrição |
+|---|---|
+| **Dados** | 911 laudos reais (4 médicos), auditados linha a linha (Fase 0) |
+| **Extração** | 20.498 sentenças → 15.275 conceitos clínicos estruturados, por regras (sem LLM) |
+| **Compilador** | Monta laudo a partir de achados escolhidos, reusando frase real do corpus |
+| **Fila de revisão** | 163 casos de ambiguidade genuína, sinalizados — nunca decididos por adivinhação |
+| **Interface** | Dashboard, Biblioteca, Novo Laudo, Fila de Revisão — integrada aos dados reais |
 
-## Reproduzir
+Quatro telas, todas puxando dados reais via API (nenhum dado mockado):
+
+- **Dashboard** — contagens do vertical e fila de revisão por risco.
+- **Biblioteca** — busca/filtra os 911 laudos reais; texto original ao
+  lado da classificação extraída, sentença por sentença.
+- **Novo laudo** — fluxo principal: busca achados reais (todas as
+  combinações já observadas no corpus, com frequência), compila um
+  laudo reusando frases reais, mostra avisos de conflito/duplicidade e
+  rastreabilidade (frase → médico de origem), copia ou exporta `.txt`.
+- **Fila de revisão clínica** — casos de ambiguidade genuína (contexto
+  pós-cirúrgico, linguagem de incerteza, medidas múltiplas...), com
+  ação de marcar como revisado.
+
+## Arquitetura
+
+```text
+data/raw/ (corpus, fora do git)
+  → backend/normalization  (RAW → clean → normalized)
+  → backend/parsers        (seções, sentenças — orientado por médico real)
+  → backend/clinical       (extração de conceitos por regras + fila de ambiguidade)
+  → backend/compiler       (banco de frases reais + montagem do laudo)
+  → backend/api            (FastAPI — nenhum mock, tudo lê do SQLite real)
+  → frontend/              (React + Vite + TypeScript + Tailwind)
+```
+
+Detalhes e decisões técnicas: `docs/architecture.md` e
+`docs/decisions/0001` a `0009` (uma por decisão relevante — motivo,
+alternativas consideradas, consequência).
+
+## Testes
 
 ```bash
-# 1. Colocar o corpus (fora do git) em:
-#    data/raw/CMS_CORPUS_2026-06-06_A_2026-09-06/<snapshot>/{manifest,stats}.json + reports_*.jsonl
-
-python3 scripts/baseline_audit.py
-python3 -m unittest tests/test_baseline_audit.py -v
+python3 -m unittest discover -s tests -v   # 133 testes (backend + API)
+cd frontend && npm run build                # typecheck + build da interface
+python3 scripts/e2e_smoke_test.py           # fluxo completo num navegador real
 ```
 
-Nenhuma dependência externa — apenas Python 3 stdlib nesta fase.
+## Limitações conhecidas (honestas, não escondidas)
 
-## Números confirmados (Fase 0, corpus RM+TC+RX, sem US)
-
-- 8.402 exames, 5.701 pacientes únicos
-- RM: 5.350 · TC: 1.712 · RX: 1.340
-- 210 `exam_type` distintos, 7 médicos
-- `laterality` nula em 66,2% dos registros (esperado — muitos exam_type não têm lado)
-- 0 registros inválidos, 0 duplicatas de `record_id`, 0 anomalias de encoding
-
-Detalhes completos e limitações identificadas em `docs/BASELINE_REPORT.md`.
+- **Escopo**: só RM de joelho. Generalizar para os outros 209
+  `exam_type` do corpus é trabalho novo, não uma extensão trivial.
+- **Sem LLM**: o compilador só reusa frases já ditas por um médico real
+  — não redige nada novo. Uma combinação de achados sem frase
+  correspondente no corpus fica `unresolved`, nunca inventada.
+- **Reuso de frase não é garantia de conteúdo exato**: uma frase real
+  pode conter informação além do achado pedido, se a extração não
+  capturou tudo o que a frase diz (recall ~58%). Ver ADR 0006.
+- **Fidelidade textual ≠ correção clínica**: a extração foi validada
+  por leitura sistemática (eu, não um radiologista) contra o texto —
+  bate com o que a frase diz. Se é a forma clinicamente certa de
+  descrever o achado, só um médico valida. Ver ADR 0007.
+- **163 casos na fila de revisão**, a maioria (89) contexto
+  pós-cirúrgico/reconstrução, onde o sistema não tenta adivinhar se um
+  achado é da estrutura nativa ou do enxerto.
+- Todo laudo compilado é **rascunho** — exige revisão médica integral
+  antes de qualquer uso real.
 
 ## Próximo passo proposto
 
-A avaliação feita até aqui (Claude lendo sentença por sentença) mede
-fidelidade textual, não correção clínica — esse teto só é superado com
-revisão de um radiologista. Duas opções, não mutuamente exclusivas:
-
-1. **Validação clínica real pelo usuário**: revisar uma amostra dos
-   14.675 conceitos extraídos (ou dos laudos compilados) e apontar
-   onde a estrutura/rótulo não corresponde ao que ele diria como
-   médico — não apenas se bate com o texto, mas se é a forma
-   clinicamente correta de descrever o achado.
-2. **Fase 8 (UI mínima)**: uma tela simples para inserir achados
-   (dropdown de estrutura/achado/gravidade) e ver o laudo compilado em
-   tempo real — torna a validação do item 1 prática de fazer, em vez
-   de exigir ler JSON.
+Validação clínica pelos olhos de um radiologista (agora prática de
+fazer via a interface, não mais via JSON), e/ou generalizar o pipeline
+para um segundo vertical (ex.: RM de ombro) para testar se a
+arquitetura escala sem recomeçar do zero.
