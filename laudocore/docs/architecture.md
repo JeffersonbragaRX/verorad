@@ -1,39 +1,66 @@
-# ARCHITECTURE — LaudoCore (estado no fim da Fase 1)
+# ARCHITECTURE — LaudoCore (estado no fim da Fase 6)
 
 ## O que existe hoje
 
-Auditoria de dados (Fase 0) + Data Engine restrito a um vertical único
-(Fase 1: RM_JOELHO_D + RM_JOELHO_E, 911 laudos). Nenhuma API, frontend,
-retrieval ou LLM foi implementado ainda — deliberadamente. Ver
+Auditoria de dados (Fase 0) + Data Engine (Fase 1) + Clinical Concept
+Layer (Fase 4) + Report Compiler (Fase 6), tudo restrito a um vertical
+único (RM_JOELHO_D + RM_JOELHO_E, 911 laudos). Nenhuma API, frontend,
+retrieval (Fase 5) ou LLM foi implementado ainda — deliberadamente. Ver
 `docs/decisions/0001-fase0-antes-de-infra.md`.
 
 ```text
 laudocore/
 ├── docs/
 │   ├── architecture.md          (este arquivo)
-│   ├── data_dictionary.md       (schema RAW + cabecalhos por medico)
+│   ├── data_dictionary.md       (schema RAW + cabecalhos por medico + vocabulario clinico)
 │   ├── BASELINE_REPORT.md       (saida da Fase 0)
 │   └── decisions/                (ADRs)
 ├── data/
 │   ├── raw/                      (corpus original — FORA do git, ver ADR 0002)
 │   ├── staging/                  (vazio — reservado)
 │   ├── processed/                (laudocore.db, SQLite — FORA do git, ver ADR 0002/0004)
-│   └── derived/qa/                (QA_REPORT.json, QA_REPORT_FASE1.json, exam_types.csv, physicians.csv)
+│   └── derived/qa/                (QA_REPORT*.json commitados; FASE4_manual_review_sample.json NAO commitado)
 ├── backend/
 │   ├── normalization/text_normalization.py   (RAW -> clean -> normalized, hashes A/B)
 │   ├── parsers/section_parser.py             (secoes, orientado a dados por medico)
 │   ├── parsers/sentence_parser.py            (sentencas por secao)
-│   └── db/schema.py                          (schema SQLite — reports/report_sections/sentences)
+│   ├── clinical/knee_concepts.py             (Fase 4: extracao de conceitos por regras, sem LLM)
+│   ├── compiler/phrase_bank.py               (Fase 6: banco de frases reais, prefere frase 'limpa')
+│   ├── compiler/report_compiler.py           (Fase 6: monta laudo a partir de achados dados)
+│   └── db/schema.py                          (schema SQLite — reports/sections/sentences/clinical_concepts)
 ├── scripts/
 │   ├── baseline_audit.py         (Fase 0)
-│   └── ingest_vertical.py        (Fase 1: ingestao do vertical piloto, comando unico, idempotente)
+│   ├── ingest_vertical.py        (Fase 1: ingestao do vertical piloto, comando unico, idempotente)
+│   ├── extract_concepts.py       (Fase 4: extracao de conceitos + QA)
+│   └── compile_report_demo.py    (Fase 6: demo do compilador + QA de cobertura)
 └── tests/
     ├── test_baseline_audit.py
     ├── test_normalization.py
     ├── test_section_parser.py
     ├── test_sentence_parser.py
+    ├── test_knee_concepts.py
+    ├── test_report_compiler.py
     └── test_ingest_vertical.py   (integracao — requer corpus local, ver skip condicional)
 ```
+
+## Fase 4 e 6 — dois bugs de precisão que só apareceram testando ponta a ponta
+
+Ambos encontrados por auto-revisão de amostra, não por reclamação
+externa — ver `docs/decisions/0005` e `docs/decisions/0006` para o
+relato completo:
+
+1. "patela" é prefixo textual de "patelar": um match por substring
+   simples atribuía ao osso patela achados que eram do tendão patelar.
+2. Rotura e degeneração eram tratadas como mutuamente exclusivas por
+   estrutura/sentença, quando são eixos clínicos independentes — isso
+   fazia o Report Compiler reutilizar frases com conteúdo (degeneração)
+   além do que o achado solicitado pedia (ausência de rotura).
+
+Ambos corrigidos com teste de regressão. O padrão que emerge: erros de
+precisão nesta camada tendem a aparecer só quando o pipeline completo
+é exercitado com casos concretos, não nos componentes isolados — reforça
+a recomendação (ADR 0006) de um mini-eval sobre o compilador inteiro
+antes de qualquer uso real, mesmo como rascunho assistido.
 
 ## Fase 1 — o que o parser aprendeu com os dados reais
 

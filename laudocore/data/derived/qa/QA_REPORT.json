@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-08T00:47:55.406012Z",
+  "generated_at": "2026-09-08T01:04:19.575038Z",
   "snapshot_used": "CMS_CORPUS_2026-06-06_A_2026-09-06_2026-09-07T18-47-50-654Z",
   "snapshot_selection_reason": "snapshot com maior numero de records declarado em manifest.json; os demais snapshots sob data/raw sao exports parciais anteriores do mesmo lote, preservados como historico, nao usados no baseline.",
   "files_read": [

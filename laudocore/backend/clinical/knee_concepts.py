@@ -136,23 +136,35 @@ def _extract_meniscus(text: str) -> list[ClinicalConcept]:
     elif "corpo do menisco" in text or "corpo meniscal" in text:
         location = "body"
 
+    # tear e degeneracao sao EIXOS INDEPENDENTES — uma estrutura pode
+    # estar degenerada e, ao mesmo tempo, sem rotura (achado real e
+    # frequente: 'Degeneração difusa do menisco lateral, sem roturas.').
+    # Tratar como if/elif (como numa versao anterior) fazia essa frase
+    # composta parecer uma frase 'limpa' de 1 conceito so, o que
+    # confundia o banco de frases do Report Compiler (Fase 6) na hora
+    # de escolher frases reutilizaveis sem conteudo extra nao pedido.
+    degeneration_negated = _has_any(text, [
+        "sem degeneração", "sem sinais de degeneração", "sem alterações degenerativas",
+    ])
+
     for structure in sides:
-        if has_tear_kw and not negated:
-            out.append(ClinicalConcept(ORGAN, structure, "tear", "present",
-                                        _certainty(text), "meniscus_tear",
-                                        location=location))
-        elif has_tear_kw and negated:
+        if has_tear_kw and negated:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
                                         _certainty(text), "meniscus_tear_negated",
                                         location=location))
-        elif has_degeneration_kw:
-            out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
-                                        _certainty(text), "meniscus_degeneration",
-                                        severity=_first_severity(text), location=location))
+        elif has_tear_kw and not negated:
+            out.append(ClinicalConcept(ORGAN, structure, "tear", "present",
+                                        _certainty(text), "meniscus_tear",
+                                        location=location))
         elif explicit_normal:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
                                         _certainty(text), "meniscus_explicit_normal",
                                         location=location))
+
+        if has_degeneration_kw and not degeneration_negated:
+            out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
+                                        _certainty(text), "meniscus_degeneration",
+                                        severity=_first_severity(text), location=location))
     return out
 
 
@@ -173,19 +185,23 @@ def _extract_cruciate_ligaments(text: str) -> list[ClinicalConcept]:
 
         severity = "complete" if "completa" in text else ("partial" if "parcial" in text else None)
 
-        if has_rupture and not negated:
+        # tear e degeneracao sao eixos independentes (mesmo raciocinio
+        # do menisco: 'verticalizado, com degeneração difusa, sem
+        # roturas' descreve os dois ao mesmo tempo).
+        if has_rupture and negated:
+            out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
+                                        _certainty(text), f"{structure}_tear_negated"))
+        elif has_rupture and not negated:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "present",
                                         _certainty(text), f"{structure}_tear",
                                         severity=severity))
-        elif has_rupture and negated:
-            out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
-                                        _certainty(text), f"{structure}_tear_negated"))
-        elif has_degeneration:
-            out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
-                                        _certainty(text), f"{structure}_degeneration"))
         elif explicit_normal:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
                                         _certainty(text), f"{structure}_explicit_normal"))
+
+        if has_degeneration:
+            out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
+                                        _certainty(text), f"{structure}_degeneration"))
     return out
 
 

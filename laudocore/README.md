@@ -11,7 +11,37 @@ um produto não relacionado (estimador de idade óssea). Ver
 `docs/decisions/0003-local-do-repositorio.md` para o porquê e como
 migrar para um repositório dedicado se desejado.
 
-## Estado atual: Fase 4 concluída (Clinical Concept Layer, vertical piloto)
+## Estado atual: Fase 6 concluída (Report Compiler, vertical piloto)
+
+Compila um laudo a partir de achados que o médico já decidiu
+(`FindingRequest`: estrutura, achado, status, gravidade, localização)
+— o compilador **escolhe a frase real do corpus**, nunca gera prosa
+livre (sem LLM ainda nesta fase). Se não houver frase real para a
+combinação pedida, o achado fica sinalizado como `unresolved`, nunca é
+preenchido com texto genérico.
+
+- técnica, achados e impressão montados a partir de frases reais,
+  rastreáveis até o médico de origem
+- auditor leve embutido: sinaliza contradições no pedido (mesma
+  estrutura pedida como presente e ausente) e qualquer estrutura que
+  apareça na impressão sem estar nos achados
+- **bug de precisão real encontrado e corrigido durante o
+  desenvolvimento**: um achado "menisco lateral sem rotura" estava
+  sendo resolvido com uma frase real que também afirmava degeneração
+  (informação não pedida) — causa raiz era um extrator da Fase 4 que
+  tratava rotura e degeneração como mutuamente exclusivas quando são
+  eixos clínicos independentes. Corrigido, com teste de regressão. Ver
+  `docs/decisions/0006-report-compiler-reuso-de-frase-real.md`
+- **limitação estrutural reconhecida, não eliminada**: reuso de frase
+  real não garante que a frase contém *apenas* o que foi pedido —
+  todo laudo compilado por esta camada é um rascunho e exige revisão
+  integral do médico antes do uso
+
+```bash
+python3 scripts/compile_report_demo.py   # requer ingest_vertical.py e extract_concepts.py já rodados
+```
+
+## Estado anterior: Fase 4 concluída (Clinical Concept Layer, vertical piloto)
 
 Extração de conceitos clínicos estruturados (estrutura, achado, status,
 gravidade, localização, medida) a partir das sentenças de
@@ -19,7 +49,7 @@ achados/impressão do vertical — **100% por regras/regex, sem LLM**
 (`backend/clinical/knee_concepts.py`), com `rule_id` rastreável em
 cada conceito.
 
-- 13.665 conceitos extraídos de 18.597 sentenças
+- 14.798 conceitos extraídos de 18.597 sentenças
 - 56,7% das sentenças produzem pelo menos um conceito (cobertura
   aproximada de recall — **não é medida de precisão**, ver ressalva
   abaixo)
@@ -102,15 +132,12 @@ Detalhes completos e limitações identificadas em `docs/BASELINE_REPORT.md`.
 
 ## Próximo passo proposto
 
-Duas opções, não mutuamente exclusivas:
-
-1. **Mini-eval do Clinical Concept Layer**: anotar manualmente 50-100
-   sentenças (idealmente pelo próprio usuário) com o conceito
-   "correto" esperado, medir precisão/recall reais contra esse gold
-   standard antes de confiar na camada de conceitos em qualquer uso
-   downstream — recomendado em `docs/decisions/0005`.
-2. **Fase 6 (Report Compiler), restrita ao vertical**: usar os
-   conceitos já extraídos para montar um laudo de RM de joelho a
-   partir de achados fornecidos pelo médico, sem geração livre por
-   LLM ainda — o próximo ponto onde "fidelidade clínica > velocidade"
-   (seção 36 da especificação) passa a ser testável na prática.
+**Mini-eval, agora sobre o compilador inteiro**: anotar manualmente
+50-100 combinações de achados (idealmente pelo próprio usuário) e
+comparar o laudo compilado contra o que ele redigiria — mede de uma vez
+a precisão real do Clinical Concept Layer (Fase 4) e da escolha de
+frases do Report Compiler (Fase 6), já que os dois problemas de
+precisão encontrados até agora só apareceram testando o pipeline
+completo, não os componentes isolados. Recomendado nas ADRs 0005 e
+0006 antes de considerar esta camada pronta para uso real, mesmo como
+rascunho assistido.
