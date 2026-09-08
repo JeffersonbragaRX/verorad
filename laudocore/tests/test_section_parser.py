@@ -118,14 +118,73 @@ class TestSectionParserUnknownHeader(unittest.TestCase):
     def setUp(self):
         self.result = parse_sections(clean(UNKNOWN_HEADER_STYLE))
 
-    def test_unknown_header_flagged_not_guessed(self):
-        self.assertIn("ACHADO ADICIONAL:", self.result.unmatched_header_candidates)
-        other_sections = [s for s in self.result.sections if s.section_type == "other"]
-        self.assertTrue(any(s.unmatched_header for s in other_sections))
+    def test_additional_findings_header_is_recognized_as_findings(self):
+        """'ACHADO ADICIONAL:' era tratado como cabecalho desconhecido
+        quando o vocabulario vinha so de RM de joelho. Levantado no
+        corpus completo (115 ocorrencias), e' um rotulo de achados —
+        agora reconhecido, e o conteudo dele continua em 'findings'."""
+        self.assertEqual(self.result.unmatched_header_candidates, [])
+        findings_text = " ".join(
+            s.text_raw for s in self.result.sections if s.section_type == "findings"
+        )
+        self.assertIn("cisto poplíteo", findings_text)
 
-    def test_content_after_unknown_header_is_preserved(self):
-        unmatched = next(s for s in self.result.sections if s.unmatched_header)
-        self.assertIn("cisto poplíteo", unmatched.text_raw)
+    def test_genuinely_unknown_header_keeps_content_in_current_section(self):
+        """Regressao do bug que perdia 96,2% dos achados de RX: um
+        cabecalho desconhecido NAO pode reclassificar o resto do laudo.
+        Ele vira subsecao rotulada da secao corrente — o conteudo
+        clinico continua sendo 'findings' — e o rotulo e' registrado
+        para revisao, nunca adivinhado."""
+        text = clean(
+            "RESSONÂNCIA MAGNÉTICA\n"
+            "JOELHO DIREITO\n"
+            "RELATÓRIO:\n"
+            "Achado principal sem particularidades.\n"
+            "ROTULO INEXISTENTE:\n"
+            "Pequeno cisto poplíteo.\n"
+        )
+        result = parse_sections(text)
+        self.assertIn("ROTULO INEXISTENTE:", result.unmatched_header_candidates)
+        findings_text = " ".join(
+            s.text_raw for s in result.sections if s.section_type == "findings"
+        )
+        self.assertIn("cisto poplíteo", findings_text)
+        self.assertTrue(any(s.unmatched_header for s in result.sections))
+
+
+class TestSectionParserImplicitFindings(unittest.TestCase):
+    """RX tipicamente nao usa 'RELATÓRIO:' — abre os achados com uma
+    frase-guia. Antes desta correcao, 96,2% dos RX ficavam sem nenhuma
+    secao de achados."""
+
+    def test_lead_in_sentence_opens_findings(self):
+        text = clean(
+            "RADIOGRAFIA\n"
+            "COLUNA LOMBOSSACRA\n"
+            "As radiografias digitais da coluna lombar em AP e perfil mostram:\n"
+            "Acentuação da lordose fisiológica.\n"
+            "Textura normal das estruturas ósseas enfocadas.\n"
+        )
+        result = parse_sections(text)
+        self.assertTrue(result.has_type("findings"))
+        findings = next(s for s in result.sections if s.section_type == "findings")
+        self.assertEqual(findings.section_subtype, "implicit_lead_in")
+        self.assertIn("lordose", findings.text_raw)
+
+    def test_body_without_any_header_is_promoted_with_explicit_marker(self):
+        """Sem cabecalho E sem frase-guia: o corpo substantivo vira
+        achados marcados como implicitos por posicao — sinalizado como
+        inferido, nunca apresentado como cabecalho explicito."""
+        text = clean(
+            "RADIOGRAFIA\n"
+            "MÃO ESQUERDA\n"
+            "Textura óssea preservada sem lesões líticas ou blásticas evidentes.\n"
+            "Espaços articulares preservados e alinhamento conservado.\n"
+        )
+        result = parse_sections(text)
+        self.assertTrue(result.has_type("findings"))
+        findings = next(s for s in result.sections if s.section_type == "findings")
+        self.assertEqual(findings.section_subtype, "implicit_no_header")
 
 
 if __name__ == "__main__":

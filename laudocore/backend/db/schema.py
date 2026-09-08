@@ -47,7 +47,10 @@ CREATE TABLE report_sections (
     text_raw TEXT NOT NULL,
     text_clean TEXT NOT NULL,
     header_line TEXT,
-    unmatched_header INTEGER NOT NULL DEFAULT 0
+    unmatched_header INTEGER NOT NULL DEFAULT 0,
+    -- rotulo adicional sem trocar o tipo: exam_title_*, implicit_lead_in,
+    -- implicit_no_header, subsection:<rotulo>, unknown_subsection:<rotulo>
+    section_subtype TEXT
 );
 
 CREATE TABLE sentences (

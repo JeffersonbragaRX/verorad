@@ -1,67 +1,1156 @@
 {
-  "generated_at": "2026-09-08T18:28:16.375684+00:00",
-  "vertical": [
-    "RM_JOELHO_D",
-    "RM_JOELHO_E"
-  ],
-  "snapshot_used": "CMS_CORPUS_2026-06-06_A_2026-09-06_2026-09-07T18-47-50-654Z",
+  "generated_at": "2026-09-08T18:47:29.544993+00:00",
+  "phase": "1_global",
+  "scope": "corpus completo",
+  "snapshot_validation": {
+    "candidate": "CMS_CORPUS_2026-06-06_A_2026-09-06_2026-09-07T18-47-50-654Z",
+    "candidate_records": 8402,
+    "compared_with": [
+      {
+        "snapshot": "CMS_CORPUS_2026-06-06_A_2026-09-06_2026-09-07T03-02-19-473Z",
+        "records": 5350,
+        "records_missing_from_candidate": 0,
+        "records_with_divergent_text": 0
+      },
+      {
+        "snapshot": "CMS_CORPUS_2026-06-06_A_2026-09-06_2026-09-07T13-27-38-122Z",
+        "records": 7062,
+        "records_missing_from_candidate": 0,
+        "records_with_divergent_text": 0
+      }
+    ],
+    "manifest_declared_records": 8402,
+    "manifest_matches_actual": true
+  },
   "totals": {
-    "reports_ingested": 911,
-    "sentences_extracted": 20498,
-    "sentences_per_report": {
-      "min": 11,
-      "max": 48,
-      "mean": 22.5
+    "reports": 8402,
+    "patients_distinct": 5701,
+    "sentences": 170418,
+    "modalities": {
+      "RM": 5350,
+      "TC": 1712,
+      "RX": 1340
+    },
+    "domains": {
+      "MSK": 5379,
+      "NEURO": 835,
+      "ABDOME": 600,
+      "TORAX": 478,
+      "PELVE_GU": 464,
+      "CABECA_PESCOCO": 327,
+      "CARDIO": 219,
+      "MAMA": 47,
+      "VASCULAR": 36,
+      "INDEFINIDO": 17
+    },
+    "exam_types_distinct": 210,
+    "doctors_distinct": 7,
+    "sentences_by_modality": {
+      "RM": 123147,
+      "TC": 36391,
+      "RX": 10880
     }
   },
-  "section_coverage_by_doctor": {
-    "CAIO": {
-      "total_reports": 177,
-      "pct_with_indication": 99.4,
-      "pct_with_technique": 100.0,
-      "pct_with_findings": 100.0,
-      "pct_with_impression": 100.0,
-      "pct_with_comparison": 0.6
+  "parser_quality": {
+    "reports_with_unmatched_header_by_modality": {
+      "RM": {
+        "n": 270,
+        "pct": 5.0
+      },
+      "TC": {
+        "n": 117,
+        "pct": 6.8
+      },
+      "RX": {
+        "n": 4,
+        "pct": 0.3
+      }
+    },
+    "reports_without_findings_section_by_modality": {
+      "RM": {
+        "n": 22,
+        "pct": 0.4
+      },
+      "TC": {
+        "n": 0,
+        "pct": 0.0
+      },
+      "RX": {
+        "n": 8,
+        "pct": 0.6
+      }
+    },
+    "implicit_findings_sections": {
+      "implicit_lead_in": 1194,
+      "implicit_no_header": 547
+    },
+    "unmatched_header_labels_distinct": 395,
+    "unmatched_header_top": [
+      [
+        "LIKERT *",
+        66
+      ],
+      [
+        "N1",
+        65
+      ],
+      [
+        "ANGIOTOMOGRAFIA",
+        35
+      ],
+      [
+        "(FIGO 4)",
+        28
+      ],
+      [
+        "(FIGO 5)",
+        28
+      ],
+      [
+        "(FIGO 6)",
+        25
+      ],
+      [
+        "DPOC.",
+        23
+      ],
+      [
+        "MI*",
+        21
+      ],
+      [
+        "(ESTÁVEL)",
+        20
+      ],
+      [
+        "(FIGO)",
+        18
+      ],
+      [
+        "BI-RADS®: 2.",
+        16
+      ],
+      [
+        "(FIGO 3)",
+        14
+      ],
+      [
+        "N2",
+        12
+      ],
+      [
+        "DESCRIÇÃO:",
+        12
+      ],
+      [
+        "DAC.",
+        12
+      ],
+      [
+        "IMPRESSÂO DIAGNÓSTICA:",
+        11
+      ],
+      [
+        "TOMOGRAFIA COMPUTADORIZADA",
+        11
+      ],
+      [
+        "RM VA",
+        9
+      ],
+      [
+        "BI-RADS®: 3.",
+        9
+      ],
+      [
+        "ABDOME E PELVE",
+        9
+      ],
+      [
+        "LOCALIZAÇÃO",
+        7
+      ],
+      [
+        "NÃO",
+        6
+      ],
+      [
+        "CARACTERIZADO",
+        6
+      ],
+      [
+        "\"SCORE\" DE NEFROMETRIA:",
+        6
+      ],
+      [
+        "TOPOGRAFIA",
+        6
+      ],
+      [
+        "VASCULARIZAÇÃO",
+        6
+      ],
+      [
+        "GORDURA INTRALESIONAL?",
+        6
+      ],
+      [
+        "EXOFÍTICO?",
+        6
+      ],
+      [
+        "DISTÂNCIA PRO SEIO RENAL",
+        6
+      ],
+      [
+        "DIMENSÕES",
+        6
+      ],
+      [
+        "COMPROMETIMENTO VASCULAR?",
+        6
+      ],
+      [
+        "LINFONODOS SUSPEITOS?",
+        6
+      ],
+      [
+        "AVALIAÇÃO VASCULAR RENAL",
+        6
+      ],
+      [
+        "RELATÒRIO :",
+        6
+      ],
+      [
+        "(FIGO 7)",
+        5
+      ],
+      [
+        "REPOUSO VALSALVA",
+        5
+      ],
+      [
+        "BI-RADS®: 6.",
+        5
+      ],
+      [
+        "ESTÁVEL?",
+        5
+      ],
+      [
+        "(FIGO 2)",
+        4
+      ],
+      [
+        "N3",
+        4
+      ]
+    ]
+  },
+  "duplication": {
+    "report_text_duplicate_groups": 512,
+    "reports_in_duplicate_groups": 1274,
+    "note": "Texto de laudo exatamente repetido entre exames distintos. Precisa ser controlado em qualquer estatistica de associacao (inflaria coocorrencia); ver Fase 4D."
+  },
+  "coverage_by_doctor": {
+    "SAMIR": {
+      "total_reports": 522,
+      "pct_with_indication": 23.6,
+      "pct_with_technique": 99.0,
+      "pct_with_findings": 99.8,
+      "pct_with_impression": 1.1,
+      "pct_with_comparison": 0.2
     },
     "RAFAEL": {
-      "total_reports": 295,
-      "pct_with_indication": 100.0,
-      "pct_with_technique": 100.0,
-      "pct_with_findings": 100.0,
-      "pct_with_impression": 100.0,
-      "pct_with_comparison": 4.7
+      "total_reports": 1528,
+      "pct_with_indication": 73.8,
+      "pct_with_technique": 74.7,
+      "pct_with_findings": 99.8,
+      "pct_with_impression": 74.8,
+      "pct_with_comparison": 3.1
     },
     "NEY": {
-      "total_reports": 368,
-      "pct_with_indication": 92.1,
-      "pct_with_technique": 100.0,
-      "pct_with_findings": 100.0,
-      "pct_with_impression": 100.0,
-      "pct_with_comparison": 11.4
+      "total_reports": 2245,
+      "pct_with_indication": 60.1,
+      "pct_with_technique": 65.6,
+      "pct_with_findings": 99.6,
+      "pct_with_impression": 65.7,
+      "pct_with_comparison": 5.7
     },
-    "SAMIR": {
-      "total_reports": 71,
-      "pct_with_indication": 4.2,
+    "SERGIO": {
+      "total_reports": 1748,
+      "pct_with_indication": 74.9,
+      "pct_with_technique": 100.0,
+      "pct_with_findings": 99.3,
+      "pct_with_impression": 90.4,
+      "pct_with_comparison": 3.8
+    },
+    "CAIO": {
+      "total_reports": 977,
+      "pct_with_indication": 79.4,
+      "pct_with_technique": 81.6,
+      "pct_with_findings": 99.7,
+      "pct_with_impression": 62.4,
+      "pct_with_comparison": 0.5
+    },
+    "JULIANA": {
+      "total_reports": 1335,
+      "pct_with_indication": 0.0,
       "pct_with_technique": 100.0,
       "pct_with_findings": 100.0,
-      "pct_with_impression": 4.2,
-      "pct_with_comparison": 0.0
+      "pct_with_impression": 99.4,
+      "pct_with_comparison": 3.7
+    },
+    "SAMIRA": {
+      "total_reports": 47,
+      "pct_with_indication": 100.0,
+      "pct_with_technique": 100.0,
+      "pct_with_findings": 93.6,
+      "pct_with_impression": 97.9,
+      "pct_with_comparison": 40.4
     }
   },
-  "unmatched_header_candidates": {
-    "ACHADO ADICIONAL:": 1,
-    "ACHADOS ADICIONAIS:": 1,
-    "REFERÊNCIA BIBLIOGRÁFICA:": 1
-  },
-  "unmatched_header_total_occurrences": 3,
-  "report_level_duplicates": {
-    "note": "Informativo — NAO removido. Mesmo texto pode corresponder a exames reais distintos (ex.: laudo padrao de normalidade).",
-    "exact_groups": 0,
-    "exact_records": 0
-  },
-  "sentence_level_duplicates": {
-    "note": "Informativo — frases identicas entre laudos sao esperadas (vocabulario padronizado) e serao a base da biblioteca de frases na Fase 3, nao um defeito de qualidade.",
-    "exact_groups": 1878,
-    "exact_records": 17288
-  }
+  "exam_type_totals": [
+    [
+      "RM_COLUNA_LOMBAR",
+      770
+    ],
+    [
+      "RM_JOELHO_D",
+      463
+    ],
+    [
+      "RM_JOELHO_E",
+      448
+    ],
+    [
+      "RM_ENCEFALO",
+      394
+    ],
+    [
+      "TC_TORAX",
+      356
+    ],
+    [
+      "RM_COLUNA_CERVICAL",
+      333
+    ],
+    [
+      "RX_COLUNA_LOMBAR",
+      305
+    ],
+    [
+      "RM_PELVIS",
+      296
+    ],
+    [
+      "RM_OMBRO_D",
+      271
+    ],
+    [
+      "RM_OMBRO_E",
+      224
+    ],
+    [
+      "TC_ABDOME_PELVE",
+      215
+    ],
+    [
+      "TC_SEIOS_DA_FACE",
+      203
+    ],
+    [
+      "TC_CORONARIAS",
+      201
+    ],
+    [
+      "TC_ENCEFALO",
+      194
+    ],
+    [
+      "TC_COLUNA_LOMBAR",
+      192
+    ],
+    [
+      "RM_ABDOME",
+      159
+    ],
+    [
+      "RM_ANGIO_CRANIO",
+      146
+    ],
+    [
+      "RM_ABDOME_PELVE",
+      145
+    ],
+    [
+      "RM_QUADRIL_E",
+      136
+    ],
+    [
+      "RM_QUADRIL_D",
+      131
+    ],
+    [
+      "RX_PUNHO",
+      124
+    ],
+    [
+      "RM_PROSTATA",
+      120
+    ],
+    [
+      "RM_SACROILIACAS",
+      111
+    ],
+    [
+      "RX_JOELHO",
+      93
+    ],
+    [
+      "RM_COLUNA_TORACICA",
+      91
+    ],
+    [
+      "RM_TORNOZELO_E",
+      90
+    ],
+    [
+      "RM_TORNOZELO_D",
+      87
+    ],
+    [
+      "RM_ATM",
+      83
+    ],
+    [
+      "RX_TORAX",
+      82
+    ],
+    [
+      "RX_COLUNA_CERVICAL",
+      67
+    ],
+    [
+      "RX_COLUNA_LOMBAR_E",
+      63
+    ],
+    [
+      "TC_COLUNA_CERVICAL",
+      58
+    ],
+    [
+      "RX_OMBRO",
+      55
+    ],
+    [
+      "RM_QUADRIL_BILATERAL",
+      54
+    ],
+    [
+      "RX_PELVE_OSSEA",
+      53
+    ],
+    [
+      "RM_PE_D",
+      46
+    ],
+    [
+      "RM_PUNHO_D",
+      44
+    ],
+    [
+      "RM_MAO_D",
+      44
+    ],
+    [
+      "RX_JOELHO_BILATERAL",
+      44
+    ],
+    [
+      "RM_MAMA",
+      43
+    ],
+    [
+      "RM_MAO_E",
+      40
+    ],
+    [
+      "RM_VIAS_BILIARES",
+      39
+    ],
+    [
+      "RM_PLEXO_LOMBOSSACRO",
+      39
+    ],
+    [
+      "RM_COTOVELO_D",
+      37
+    ],
+    [
+      "RM_HIPOFISE_SELA",
+      37
+    ],
+    [
+      "RM_PUNHO_E",
+      36
+    ],
+    [
+      "RM_PE_E",
+      36
+    ],
+    [
+      "RX_COLUNA_LOMBAR_D",
+      36
+    ],
+    [
+      "RM_PELVE_OSSEA",
+      35
+    ],
+    [
+      "TC_RINS_VIAS_URINARIAS",
+      33
+    ],
+    [
+      "RM_COTOVELO_E",
+      30
+    ],
+    [
+      "RM_OUVIDO",
+      29
+    ],
+    [
+      "TC_ABDOME",
+      28
+    ],
+    [
+      "RX_MAO",
+      25
+    ],
+    [
+      "TC_PESCOCO",
+      24
+    ],
+    [
+      "RX_PE",
+      24
+    ],
+    [
+      "RM_DEDOS",
+      23
+    ],
+    [
+      "RX_QUADRIL_BILATERAL",
+      22
+    ],
+    [
+      "RM_COLUNA_SACRAL",
+      20
+    ],
+    [
+      "RX_JOELHO_D",
+      20
+    ],
+    [
+      "RX_TORNOZELO",
+      19
+    ],
+    [
+      "RX_PELVE_OSSEA_BILATERAL",
+      18
+    ],
+    [
+      "RM_ANGIO_PESCOCO",
+      17
+    ],
+    [
+      "TC_ANGIO_CRANIO",
+      17
+    ],
+    [
+      "RX_JOELHO_E",
+      17
+    ],
+    [
+      "RM_ORBITAS",
+      16
+    ],
+    [
+      "RM_COXA_D",
+      16
+    ],
+    [
+      "RM_CORACAO",
+      16
+    ],
+    [
+      "RM_COXA_E",
+      16
+    ],
+    [
+      "RX_PE_D",
+      16
+    ],
+    [
+      "RM_PERNA_E",
+      15
+    ],
+    [
+      "RX_COLUNA_TORACICA",
+      15
+    ],
+    [
+      "RM_PERNA_D",
+      13
+    ],
+    [
+      "RM_SSPINE",
+      13
+    ],
+    [
+      "RX_MAO_BILATERAL",
+      13
+    ],
+    [
+      "RM_FIGADO",
+      12
+    ],
+    [
+      "TC_ARCOS_COSTAIS",
+      12
+    ],
+    [
+      "TC_PUNHO_D",
+      11
+    ],
+    [
+      "RX_SACROILIACAS",
+      11
+    ],
+    [
+      "TC_COLUNA_TORACICA",
+      10
+    ],
+    [
+      "RX_PERNA_D",
+      10
+    ],
+    [
+      "RX_SEIOS_DA_FACE_BILATERAL",
+      10
+    ],
+    [
+      "RX_PE_BILATERAL",
+      10
+    ],
+    [
+      "TC_AORTA_TORACICA",
+      9
+    ],
+    [
+      "TC_QUADRIL_BILATERAL",
+      9
+    ],
+    [
+      "RX_LARINGE_FARINGE",
+      9
+    ],
+    [
+      "RX_PUNHO_BILATERAL",
+      9
+    ],
+    [
+      "TC_QUADRIL_D",
+      8
+    ],
+    [
+      "TC_TORNOZELO_D",
+      8
+    ],
+    [
+      "TC_ATM",
+      8
+    ],
+    [
+      "TC_PELVE_OSSEA",
+      8
+    ],
+    [
+      "RX_COTOVELO",
+      8
+    ],
+    [
+      "RX_OMBRO_D",
+      8
+    ],
+    [
+      "RX_SEIOS_DA_FACE",
+      8
+    ],
+    [
+      "TC_PARTES_MOLES",
+      7
+    ],
+    [
+      "TC_PELVIS",
+      7
+    ],
+    [
+      "TC_MASTOIDES_TEMPORAIS",
+      7
+    ],
+    [
+      "RX_OMBRO_E",
+      7
+    ],
+    [
+      "RX_QUADRIL_E",
+      7
+    ],
+    [
+      "RX_TORNOZELO_BILATERAL",
+      7
+    ],
+    [
+      "RX_COXA_BILATERAL",
+      7
+    ],
+    [
+      "RX_SEIOS_DA_FACE_D",
+      7
+    ],
+    [
+      "RM_SEIOS_DA_FACE",
+      6
+    ],
+    [
+      "RM_ARCOS_COSTAIS",
+      6
+    ],
+    [
+      "RM_TORAX",
+      6
+    ],
+    [
+      "TC_AORTA_ABDOMINAL",
+      6
+    ],
+    [
+      "TC_TORNOZELO_E",
+      6
+    ],
+    [
+      "RX_PUNHO_E",
+      6
+    ],
+    [
+      "RX_PUNHO_D",
+      6
+    ],
+    [
+      "RX_COLUNA_LOMBAR_BILATERAL",
+      6
+    ],
+    [
+      "RX_DEDOS_BILATERAL",
+      6
+    ],
+    [
+      "RM_PESCOCO",
+      5
+    ],
+    [
+      "TC_JOELHO",
+      5
+    ],
+    [
+      "TC_PE_E",
+      5
+    ],
+    [
+      "TC_COLUNA_SACRAL",
+      5
+    ],
+    [
+      "TC_JOELHO_D",
+      5
+    ],
+    [
+      "TC_JOELHO_E",
+      5
+    ],
+    [
+      "TC_PE_D",
+      5
+    ],
+    [
+      "RX_MAO_E",
+      5
+    ],
+    [
+      "RX_TORNOZELO_D",
+      5
+    ],
+    [
+      "RX_MAO_D",
+      5
+    ],
+    [
+      "RM_RINS_VIAS_URINARIAS",
+      4
+    ],
+    [
+      "RM_ANTEBRACO_E",
+      4
+    ],
+    [
+      "RM_JOELHO_BILATERAL",
+      4
+    ],
+    [
+      "RM_MAMA_BILATERAL",
+      4
+    ],
+    [
+      "TC_OMBRO_D",
+      4
+    ],
+    [
+      "TC_PUNHO_E",
+      4
+    ],
+    [
+      "TC_ANGIO_PESCOCO",
+      4
+    ],
+    [
+      "RX_ARCOS_COSTAIS_D",
+      4
+    ],
+    [
+      "RX_COLUNA_TORACICA_D",
+      4
+    ],
+    [
+      "RX_OMBRO_BILATERAL",
+      4
+    ],
+    [
+      "RX_TORNOZELO_E",
+      4
+    ],
+    [
+      "RX_PELVE_OSSEA_E",
+      4
+    ],
+    [
+      "RM_BEXIGA",
+      3
+    ],
+    [
+      "RM_ESTERNO",
+      3
+    ],
+    [
+      "TC_TORNOZELO",
+      3
+    ],
+    [
+      "TC_QUADRIL_E",
+      3
+    ],
+    [
+      "TC_ORBITAS",
+      3
+    ],
+    [
+      "TC_SACROILIACAS",
+      3
+    ],
+    [
+      "RX_SACROILIACAS_BILATERAL",
+      3
+    ],
+    [
+      "RX_ANTEBRACO_D",
+      3
+    ],
+    [
+      "RX_COTOVELO_D",
+      3
+    ],
+    [
+      "RX_COLUNA_TORACICA_E",
+      3
+    ],
+    [
+      "RX_SACROILIACAS_D",
+      3
+    ],
+    [
+      "RX_TORAX_E",
+      3
+    ],
+    [
+      "RX_PELVE_OSSEA_D",
+      3
+    ],
+    [
+      "RX_COLUNAS_MULTIPLAS",
+      3
+    ],
+    [
+      "RM_ANTEBRACO_D",
+      2
+    ],
+    [
+      "RM_ESCAPULA_D",
+      2
+    ],
+    [
+      "RM_CLAVICULA_E",
+      2
+    ],
+    [
+      "RM_DEDOS_D",
+      2
+    ],
+    [
+      "RM_COLUNA_LOMBAR_BILATERAL",
+      2
+    ],
+    [
+      "RM_PERNA_BILATERAL",
+      2
+    ],
+    [
+      "RM_COXA_BILATERAL",
+      2
+    ],
+    [
+      "RM_PLEXO_BRAQUIAL",
+      2
+    ],
+    [
+      "RM_BRACO_D",
+      2
+    ],
+    [
+      "RM_TORNOZELO_BILATERAL",
+      2
+    ],
+    [
+      "RM_QUADRIL",
+      2
+    ],
+    [
+      "RM_OMBRO_BILATERAL",
+      2
+    ],
+    [
+      "RM_PUNHO_BILATERAL",
+      2
+    ],
+    [
+      "RM_PLEXO_BRAQUIAL_BILATERAL",
+      2
+    ],
+    [
+      "TC_CORONARIAS_E",
+      2
+    ],
+    [
+      "TC_ESTERNO",
+      2
+    ],
+    [
+      "TC_COTOVELO_D",
+      2
+    ],
+    [
+      "TC_HIPOFISE_SELA",
+      2
+    ],
+    [
+      "RX_DEDOS_D",
+      2
+    ],
+    [
+      "RX_QUADRIL_D",
+      2
+    ],
+    [
+      "RX_TORAX_BILATERAL",
+      2
+    ],
+    [
+      "RX_PE_E",
+      2
+    ],
+    [
+      "RX_COTOVELO_BILATERAL",
+      2
+    ],
+    [
+      "RX_SACROILIACAS_E",
+      2
+    ],
+    [
+      "RX_COXA_D",
+      2
+    ],
+    [
+      "RX_PARTES_MOLES_D",
+      2
+    ],
+    [
+      "RX_PERNA",
+      2
+    ],
+    [
+      "RM_PLEXO_LOMBOSSACRO_E",
+      1
+    ],
+    [
+      "RM_FACE",
+      1
+    ],
+    [
+      "RM_PE_BILATERAL",
+      1
+    ],
+    [
+      "RM_COXA",
+      1
+    ],
+    [
+      "RM_PERNA",
+      1
+    ],
+    [
+      "RM_BRACO_E",
+      1
+    ],
+    [
+      "RM_COTOVELO_BILATERAL",
+      1
+    ],
+    [
+      "RM_SCAPULA_E",
+      1
+    ],
+    [
+      "RM_DEDOS_E",
+      1
+    ],
+    [
+      "RM_MAO_BILATERAL",
+      1
+    ],
+    [
+      "RM_DEDOS_BILATERAL",
+      1
+    ],
+    [
+      "RM_TESTICULOS_ESCROTO",
+      1
+    ],
+    [
+      "RM_PAREDE_TORACICA",
+      1
+    ],
+    [
+      "TC_CLAVICULA",
+      1
+    ],
+    [
+      "TC_JOELHO_BILATERAL",
+      1
+    ],
+    [
+      "TC_OMBRO_E",
+      1
+    ],
+    [
+      "TC_MAO_D",
+      1
+    ],
+    [
+      "TC_COXA_D",
+      1
+    ],
+    [
+      "TC_COTOVELO_E",
+      1
+    ],
+    [
+      "TC_EXTREMITY",
+      1
+    ],
+    [
+      "TC_CLAVICULA_E",
+      1
+    ],
+    [
+      "TC_QUADRIL",
+      1
+    ],
+    [
+      "TC_PANCREAS",
+      1
+    ],
+    [
+      "TC_EXTREMITY_BILATERAL",
+      1
+    ],
+    [
+      "TC_MAO_E",
+      1
+    ],
+    [
+      "TC_PERNA_D",
+      1
+    ],
+    [
+      "RX_ANTEBRACO_E",
+      1
+    ],
+    [
+      "RX_BRACO_D",
+      1
+    ],
+    [
+      "RX_BRACO_E",
+      1
+    ],
+    [
+      "RX_ABDOME",
+      1
+    ],
+    [
+      "RX_COTOVELO_E",
+      1
+    ],
+    [
+      "RX_COXA_E",
+      1
+    ],
+    [
+      "RX_ENCEFALO",
+      1
+    ],
+    [
+      "RX_TORAX_D",
+      1
+    ],
+    [
+      "RX_PERNA_E",
+      1
+    ],
+    [
+      "RX_COLUNA_TORACICA_BILATERAL",
+      1
+    ]
+  ]
 }
