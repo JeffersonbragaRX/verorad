@@ -4,7 +4,14 @@ import { useAsync } from '../hooks/useAsync'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Badge, Button, Card, EmptyState, ErrorBanner, Spinner } from '../components/ui'
-import type { CompileResponse, FindingRequestIn, TaxonomyOption } from '../api/types'
+import type { CompileResponse, FindingRequestIn, TaxonomyOption, TechniqueSuggestion } from '../api/types'
+
+// Prefixos de aviso que representam risco clinico real (espelha
+// backend/compiler/report_compiler.py:_BLOCKING_WARNING_PREFIXES) —
+// usados so para destacar visualmente qual linha do painel de avisos
+// e' a que esta' bloqueando copiar/exportar (a decisao de bloquear em
+// si vem de result.blocking, calculado no backend).
+const BLOCKING_WARNING_PREFIXES = ['CONTRADIÇÃO:', 'LATERALIDADE:']
 
 interface SelectedFinding extends FindingRequestIn {
   key: string
@@ -47,6 +54,10 @@ export function Compiler() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [selected, setSelected] = useState<SelectedFinding[]>([])
   const [doctor, setDoctor] = useState('')
+  const [laterality, setLaterality] = useState('')
+  const [techniqueText, setTechniqueText] = useState('')
+  const [techniqueSuggestions, setTechniqueSuggestions] = useState<TechniqueSuggestion[] | null>(null)
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
   const [indicationText, setIndicationText] = useState('')
 
   const [compiling, setCompiling] = useState(false)
@@ -74,7 +85,7 @@ export function Compiler() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, doctor, indicationText])
+  }, [selected, doctor, laterality, techniqueText, indicationText])
 
   function addFinding(o: TaxonomyOption) {
     const candidate: FindingRequestIn = {
@@ -108,6 +119,8 @@ export function Compiler() {
           structure, finding, status, severity, location,
         })),
         doctor: doctor || null,
+        laterality: laterality || null,
+        technique_text: techniqueText.trim() || null,
         indication_text: indicationText || null,
       })
       setResult(res)
@@ -118,8 +131,21 @@ export function Compiler() {
     }
   }
 
+  async function handleLoadTechniqueSuggestions() {
+    setLoadingSuggestions(true)
+    try {
+      const suggestions = await api.techniqueSuggestions(doctor || null)
+      setTechniqueSuggestions(suggestions)
+      if (suggestions.length === 0) notify('error', 'Nenhuma sugestão real encontrada no corpus.')
+    } catch (err) {
+      notify('error', err instanceof Error ? err.message : 'Erro ao buscar sugestões.')
+    } finally {
+      setLoadingSuggestions(false)
+    }
+  }
+
   async function handleCopy() {
-    if (!result) return
+    if (!result || result.blocking) return
     try {
       await navigator.clipboard.writeText(result.rendered_text)
       notify('success', 'Laudo copiado para a área de transferência.')
@@ -129,7 +155,7 @@ export function Compiler() {
   }
 
   function handleExport() {
-    if (!result) return
+    if (!result || result.blocking) return
     const blob = new Blob([result.rendered_text], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -219,20 +245,77 @@ export function Compiler() {
           </Card>
 
           <Card className="space-y-3 p-5">
-            <div>
-              <label className="text-sm font-semibold text-[var(--color-ink)]">Médico (opcional)</label>
-              <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
-                Usa a frase preferida desse médico quando ele já disse algo parecido.
-              </p>
-              <select
-                value={doctor}
-                onChange={(e) => setDoctor(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
-              >
-                <option value="">Sem preferência (mais frequente geral)</option>
-                {stats?.doctors.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-semibold text-[var(--color-ink)]">Médico (opcional)</label>
+                <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
+                  Usa a frase preferida desse médico quando ele já disse algo parecido.
+                </p>
+                <select
+                  value={doctor}
+                  onChange={(e) => setDoctor(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+                >
+                  <option value="">Sem preferência (mais frequente geral)</option>
+                  {stats?.doctors.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[var(--color-ink)]">Lado do exame</label>
+                <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
+                  Evita reaproveitar frase de exame do lado oposto que nomeia o lado.
+                </p>
+                <select
+                  value={laterality}
+                  onChange={(e) => setLaterality(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+                >
+                  <option value="">Não informado</option>
+                  <option value="D">Direito</option>
+                  <option value="E">Esquerdo</option>
+                </select>
+              </div>
             </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold text-[var(--color-ink)]">Técnica (opcional)</label>
+                <button
+                  type="button"
+                  onClick={handleLoadTechniqueSuggestions}
+                  disabled={loadingSuggestions}
+                  className="text-xs font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50"
+                >
+                  {loadingSuggestions ? 'Buscando…' : 'Sugerir do corpus'}
+                </button>
+              </div>
+              <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
+                Nunca preenchida sozinha — escreva a técnica deste exame ou escolha uma sugestão real abaixo.
+              </p>
+              <textarea
+                value={techniqueText}
+                onChange={(e) => setTechniqueText(e.target.value)}
+                rows={2}
+                placeholder="Ex.: Sequências FSE em múltiplos planos."
+                className="mt-2 w-full resize-none rounded-lg border border-[var(--color-border-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+              />
+              {techniqueSuggestions && techniqueSuggestions.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {techniqueSuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setTechniqueText(s.text); setTechniqueSuggestions(null) }}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-left text-xs hover:bg-[var(--color-bg-subtle)]"
+                    >
+                      <span className="text-[var(--color-ink)]">{s.text}</span>
+                      <span className="shrink-0 text-[var(--color-ink-faint)]">{s.doctor} · {s.frequency}×</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="text-sm font-semibold text-[var(--color-ink)]">Indicação clínica (opcional)</label>
               <textarea
@@ -261,10 +344,15 @@ export function Compiler() {
           {result && !compiling && (
             <>
               {result.warnings.length > 0 && (
-                <Card className="border-[var(--color-warning-border)] p-4">
-                  <h3 className="text-sm font-semibold text-[var(--color-warning)]">Avisos do auditor</h3>
+                <Card className={result.blocking ? 'border-[var(--color-danger-border)] p-4' : 'border-[var(--color-warning-border)] p-4'}>
+                  <h3 className={result.blocking ? 'text-sm font-semibold text-[var(--color-danger)]' : 'text-sm font-semibold text-[var(--color-warning)]'}>
+                    {result.blocking ? 'Revisão necessária antes de copiar ou exportar' : 'Avisos'}
+                  </h3>
                   <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-[var(--color-ink)]">
-                    {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    {result.warnings.map((w, i) => {
+                      const isBlocking = BLOCKING_WARNING_PREFIXES.some((p) => w.startsWith(p))
+                      return <li key={i} className={isBlocking ? 'font-medium text-[var(--color-danger)]' : undefined}>{w}</li>
+                    })}
                   </ul>
                 </Card>
               )}
@@ -289,10 +377,27 @@ export function Compiler() {
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-[var(--color-ink)]">Laudo compilado</h3>
                   <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={handleCopy}>Copiar</Button>
-                    <Button variant="secondary" size="sm" onClick={handleExport}>Exportar .txt</Button>
+                    <Button
+                      variant="secondary" size="sm" onClick={handleCopy}
+                      disabled={result.blocking}
+                      title={result.blocking ? 'Resolva os avisos de revisão necessária antes de copiar' : undefined}
+                    >
+                      Copiar
+                    </Button>
+                    <Button
+                      variant="secondary" size="sm" onClick={handleExport}
+                      disabled={result.blocking}
+                      title={result.blocking ? 'Resolva os avisos de revisão necessária antes de exportar' : undefined}
+                    >
+                      Exportar .txt
+                    </Button>
                   </div>
                 </div>
+                {result.blocking && (
+                  <p className="mb-3 text-xs font-medium text-[var(--color-danger)]">
+                    Copiar e exportar estão desabilitados até os avisos acima serem revisados.
+                  </p>
+                )}
                 <pre className="whitespace-pre-wrap rounded-lg bg-[var(--color-bg-subtle)] p-4 font-sans text-sm leading-relaxed text-[var(--color-ink)]">
                   {result.rendered_text}
                 </pre>

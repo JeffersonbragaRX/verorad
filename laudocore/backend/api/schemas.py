@@ -105,7 +105,15 @@ class FindingRequestIn(BaseModel):
 class CompileRequestIn(BaseModel):
     findings: list[FindingRequestIn]
     doctor: str | None = None
+    laterality: str | None = None  # 'D' | 'E' — usado p/ evitar reaproveitar frase do lado oposto
+    technique_text: str | None = None  # nunca preenchido automaticamente (ver ADR 0010)
     indication_text: str | None = None
+
+
+class TechniqueSuggestionOut(BaseModel):
+    text: str
+    doctor: str
+    frequency: int
 
 
 class ResolvedFindingOut(BaseModel):
@@ -127,6 +135,7 @@ class CompileResponseOut(BaseModel):
     impression_lines: list[ResolvedFindingOut]
     unresolved: list[FindingRequestIn]
     warnings: list[str]
+    blocking: bool  # True: há aviso de risco clínico real — não copiar/exportar sem revisar
     rendered_text: str
 
 

@@ -243,6 +243,53 @@ class TestCompileEndpoint(ApiTestBase):
         data = r.json()
         self.assertTrue(any("DUPLICIDADE" in w for w in data["warnings"]))
 
+    def test_compile_does_not_auto_fill_technique(self):
+        """Bug real corrigido (ADR 0010): a API nao deve mais preencher
+        tecnica sozinha a partir do corpus — so quando o chamador manda
+        technique_text explicitamente."""
+        body = {"findings": []}
+        r = self.client.post("/api/compile", json=body)
+        data = r.json()
+        self.assertIsNone(data["technique_text"])
+        self.assertTrue(any(w.startswith("TÉCNICA:") for w in data["warnings"]))
+
+    def test_compile_uses_explicit_technique_text(self):
+        body = {"findings": [], "technique_text": "Sequências FSE."}
+        r = self.client.post("/api/compile", json=body)
+        data = r.json()
+        self.assertEqual(data["technique_text"], "Sequências FSE.")
+
+    def test_compile_contradiction_sets_blocking_true(self):
+        body = {"findings": [
+            {"structure": "acl", "finding": "tear", "status": "present"},
+            {"structure": "acl", "finding": "tear", "status": "absent"},
+        ]}
+        r = self.client.post("/api/compile", json=body)
+        data = r.json()
+        self.assertTrue(data["blocking"])
+
+    def test_compile_without_warnings_blocking_false(self):
+        body = {
+            "findings": [{"structure": "meniscus_lateral", "finding": "tear", "status": "absent"}],
+            "technique_text": "Sequências FSE.",
+        }
+        r = self.client.post("/api/compile", json=body)
+        data = r.json()
+        self.assertFalse(data["blocking"])
+
+
+class TestTechniqueSuggestionsEndpoint(ApiTestBase):
+    def test_returns_real_corpus_technique(self):
+        r = self.client.get("/api/technique-suggestions")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(any(c["text"] == "Sequências FSE." for c in data))
+
+    def test_filters_by_doctor(self):
+        r = self.client.get("/api/technique-suggestions", params={"doctor": "NEY"})
+        data = r.json()
+        self.assertTrue(all(c["doctor"] == "NEY" for c in data))
+
 
 class TestReviewQueueEndpoints(ApiTestBase):
     def test_list_pending(self):

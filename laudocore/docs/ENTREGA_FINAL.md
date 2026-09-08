@@ -6,6 +6,15 @@ autônomo que cobriu Fases 0, 1, 4, 6, mini-eval de fidelidade textual,
 correções textuais adicionais, fila de revisão clínica, API e
 interface final.
 
+> **Nota posterior:** uma auditoria técnica externa encontrou 8 falhas
+> reais adicionais no extrator e no compilador depois desta entrega
+> (algumas bloqueantes para uso clínico), todas corrigidas numa rodada
+> seguinte — ver `docs/decisions/0010-correcoes-pos-auditoria-externa.md`.
+> Os números de conceitos/fila de revisão abaixo (15.275 / 163) são os
+> desta entrega original; após a correção são 15.221 / 161 (ver ADR
+> 0010 para a explicação da diferença). O restante deste documento fica
+> como registro histórico da entrega original.
+
 ## 1. Fases previstas implementadas
 
 Escopo redefinido logo no início (ver `docs/architecture.md`, seção

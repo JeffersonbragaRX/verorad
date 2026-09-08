@@ -45,6 +45,19 @@ class TestMeniscus(unittest.TestCase):
         c = _by_structure(r, "meniscus_medial")[0]
         self.assertEqual(c.finding, "degeneration")
 
+    def test_negation_scoped_per_side_not_bled_across_comma(self):
+        """Regressao (auditoria externa, confirmado no corpus): 'Menisco
+        medial sem roturas, observando-se lesão do menisco lateral.'
+        marcava os DOIS meniscos como sem rotura, porque a negacao era
+        checada na sentenca inteira em vez de por lado."""
+        r = extract_concepts(
+            "menisco medial sem roturas, observando-se lesão do menisco lateral."
+        )
+        medial = _by_structure(r, "meniscus_medial")[0]
+        lateral = _by_structure(r, "meniscus_lateral")[0]
+        self.assertEqual(medial.status, "absent")
+        self.assertEqual(lateral.status, "present")
+
 
 class TestCruciateLigaments(unittest.TestCase):
     def test_acl_complete_tear(self):
@@ -88,6 +101,17 @@ class TestCruciateLigaments(unittest.TestCase):
         r = extract_concepts("rotura praticamente completa do ligamento cruzado anterior.")
         c = _by_structure(r, "acl")[0]
         self.assertEqual(c.severity, "near_complete")
+
+    def test_negation_not_bled_from_other_structure_clause(self):
+        """Regressao (auditoria externa, confirmado no corpus): 'Rotura
+        do ligamento cruzado anterior, sem lesão meniscal.' marcava o
+        LCA como AUSENTE, porque a negacao era checada na sentenca
+        inteira — 'sem lesão' (sobre o menisco, clausula diferente)
+        contaminava o achado do LCA, afirmado antes da virgula."""
+        r = extract_concepts("rotura do ligamento cruzado anterior, sem lesão meniscal.")
+        c = _by_structure(r, "acl")[0]
+        self.assertEqual(c.finding, "tear")
+        self.assertEqual(c.status, "present")
 
     def test_genuinely_complete_tear_still_reported_as_complete(self):
         r = extract_concepts("rotura completa do ligamento cruzado anterior.")
@@ -200,6 +224,52 @@ class TestChondropathy(unittest.TestCase):
         r = extract_concepts("fissuras condrais profundas na patela, com edema subcondral.")
         chondropathy_concepts = [c for c in r.concepts if c.finding == "chondropathy"]
         self.assertTrue(chondropathy_concepts)
+
+    def test_negated_chondropathy_not_reported_as_present(self):
+        """Bug real encontrado no corpus (nao fazia parte da auditoria
+        externa): o extrator nunca checava negacao — 'Não há sinais de
+        condropatia.' virava 'chondropathy present'. Confirmado em
+        sentencas reais do corpus."""
+        r = extract_concepts("não há sinais de condropatia.")
+        c = r.concepts[0]
+        self.assertEqual(c.finding, "chondropathy")
+        self.assertEqual(c.status, "absent")
+
+    def test_negated_chondropathy_with_qualifier_still_detected(self):
+        r = extract_concepts("não há sinais de condropatia significativa no presente estudo.")
+        c = r.concepts[0]
+        self.assertEqual(c.status, "absent")
+
+
+class TestBoneMarrowEdema(unittest.TestCase):
+    """Bug real encontrado no corpus (nao fazia parte da auditoria
+    externa, achado ao revisar esta rodada de correcao): 228 das 730
+    sentencas do corpus que mencionam 'edema subcondral' o fazem negado
+    ('..., sem edema subcondral.') — o extrator nunca checava negacao."""
+
+    def test_present_when_not_negated(self):
+        r = extract_concepts("presença de edema ósseo no côndilo femoral lateral.")
+        c = _by_structure(r, "bone")[0]
+        self.assertEqual(c.finding, "bone_marrow_edema")
+        self.assertEqual(c.status, "present")
+
+    def test_negated_subcondral_edema_not_reported_as_present(self):
+        r = extract_concepts(
+            "fissuras condrais extensas, no terço médio da patela, "
+            "em região na faceta lateral, sem edema subcondral."
+        )
+        bone = _by_structure(r, "bone")[0]
+        self.assertEqual(bone.status, "absent")
+
+    def test_negated_edema_with_filler_words_before_trigger(self):
+        """'sem focos de edema ósseo' — negacao nao colada diretamente
+        no termo-gatilho, com palavras de preenchimento entre os dois."""
+        r = extract_concepts(
+            "sequela de impactação óssea no aspecto anterior do côndilo "
+            "femoral lateral, sem focos de edema ósseo no presente estudo."
+        )
+        bone = _by_structure(r, "bone")[0]
+        self.assertEqual(bone.status, "absent")
 
 
 class TestInsufficiencyFracture(unittest.TestCase):

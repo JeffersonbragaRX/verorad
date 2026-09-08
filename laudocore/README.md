@@ -34,9 +34,9 @@ do Git).
 | Camada | Descrição |
 |---|---|
 | **Dados** | 911 laudos reais (4 médicos), auditados linha a linha (Fase 0) |
-| **Extração** | 20.498 sentenças → 15.275 conceitos clínicos estruturados, por regras (sem LLM) |
+| **Extração** | 20.498 sentenças → 15.221 conceitos clínicos estruturados, por regras (sem LLM) |
 | **Compilador** | Monta laudo a partir de achados escolhidos, reusando frase real do corpus |
-| **Fila de revisão** | 163 casos de ambiguidade genuína, sinalizados — nunca decididos por adivinhação |
+| **Fila de revisão** | 161 casos de ambiguidade genuína, sinalizados — nunca decididos por adivinhação |
 | **Interface** | Dashboard, Biblioteca, Novo Laudo, Fila de Revisão — integrada aos dados reais |
 
 Quatro telas, todas puxando dados reais via API (nenhum dado mockado):
@@ -45,9 +45,13 @@ Quatro telas, todas puxando dados reais via API (nenhum dado mockado):
 - **Biblioteca** — busca/filtra os 911 laudos reais; texto original ao
   lado da classificação extraída, sentença por sentença.
 - **Novo laudo** — fluxo principal: busca achados reais (todas as
-  combinações já observadas no corpus, com frequência), compila um
-  laudo reusando frases reais, mostra avisos de conflito/duplicidade e
-  rastreabilidade (frase → médico de origem), copia ou exporta `.txt`.
+  combinações já observadas no corpus, com frequência), lado do exame e
+  técnica são informados explicitamente (nunca preenchidos sozinhos —
+  técnica tem sugestão real do corpus, mas só entra no laudo se
+  confirmada), compila um laudo reusando frases reais, mostra avisos de
+  conflito/lateralidade/mistura de médico e rastreabilidade (frase →
+  médico de origem). Copiar/exportar ficam desabilitados quando há
+  aviso de risco clínico real (contradição ou lateralidade incerta).
 - **Fila de revisão clínica** — casos de ambiguidade genuína (contexto
   pós-cirúrgico, linguagem de incerteza, medidas múltiplas...), com
   ação de marcar como revisado.
@@ -65,13 +69,18 @@ data/raw/ (corpus, fora do git)
 ```
 
 Detalhes e decisões técnicas: `docs/architecture.md` e
-`docs/decisions/0001` a `0009` (uma por decisão relevante — motivo,
-alternativas consideradas, consequência).
+`docs/decisions/0001` a `0010` (uma por decisão relevante — motivo,
+alternativas consideradas, consequência). A ADR 0010 documenta uma
+rodada de correções pós-auditoria externa: bugs reais de negação
+(escopo por sentença inteira em vez de cláusula; extratores sem
+checagem de negação nenhuma), normalidade e técnica fabricadas no
+compilador, ausência de lateralidade e de sinalização de mistura de
+médico — todos corrigidos, com teste de regressão para cada um.
 
 ## Testes
 
 ```bash
-python3 -m unittest discover -s tests -v   # 133 testes (backend + API)
+python3 -m unittest discover -s tests -v   # 158 testes (backend + API)
 cd frontend && npm run build                # typecheck + build da interface
 python3 scripts/e2e_smoke_test.py           # fluxo completo num navegador real
 ```
@@ -90,11 +99,19 @@ python3 scripts/e2e_smoke_test.py           # fluxo completo num navegador real
   por leitura sistemática (eu, não um radiologista) contra o texto —
   bate com o que a frase diz. Se é a forma clinicamente certa de
   descrever o achado, só um médico valida. Ver ADR 0007.
-- **163 casos na fila de revisão**, a maioria (89) contexto
+- **Escopo de negação por pontuação, não parser sintático**: a
+  correção de negação por cláusula (ADR 0010) usa vírgula/ponto-e-
+  vírgula como heurística de fronteira entre estruturas — cobre os
+  casos reais observados no corpus, mas uma coordenação sem vírgula
+  entre duas estruturas diferentes ainda pode misturar negação.
+- **161 casos na fila de revisão**, a maioria (89) contexto
   pós-cirúrgico/reconstrução, onde o sistema não tenta adivinhar se um
   achado é da estrutura nativa ou do enxerto.
 - Todo laudo compilado é **rascunho** — exige revisão médica integral
-  antes de qualquer uso real.
+  antes de qualquer uso real. Avisos de contradição/lateralidade
+  bloqueiam copiar/exportar; avisos de mistura de médico e ausência de
+  frase real de impressão ficam visíveis mas não bloqueiam — a
+  triagem final de tudo isso ainda é do médico.
 
 ## Próximo passo proposto
 

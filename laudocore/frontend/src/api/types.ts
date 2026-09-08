@@ -98,7 +98,14 @@ export interface CompileResponse {
   impression_lines: ResolvedFindingOut[]
   unresolved: FindingRequestIn[]
   warnings: string[]
+  blocking: boolean
   rendered_text: string
+}
+
+export interface TechniqueSuggestion {
+  text: string
+  doctor: string
+  frequency: number
 }
 
 export interface ReviewQueueItem {

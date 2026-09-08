@@ -1,6 +1,6 @@
 import type {
   ReportSummary, ReportDetail, TaxonomyOption, PhraseLibraryEntry,
-  FindingRequestIn, CompileResponse, ReviewQueueItem, Stats,
+  FindingRequestIn, CompileResponse, ReviewQueueItem, Stats, TechniqueSuggestion,
 } from './types'
 
 export class ApiError extends Error {
@@ -57,8 +57,13 @@ export const api = {
     structure?: string; finding?: string; status?: string; search?: string
   } = {}) => request<PhraseLibraryEntry[]>(`/api/phrases${qs(params)}`),
 
-  compile: (body: { findings: FindingRequestIn[]; doctor?: string | null; indication_text?: string | null }) =>
-    request<CompileResponse>('/api/compile', { method: 'POST', body: JSON.stringify(body) }),
+  compile: (body: {
+    findings: FindingRequestIn[]; doctor?: string | null; laterality?: string | null
+    technique_text?: string | null; indication_text?: string | null
+  }) => request<CompileResponse>('/api/compile', { method: 'POST', body: JSON.stringify(body) }),
+
+  techniqueSuggestions: (doctor?: string | null) =>
+    request<TechniqueSuggestion[]>(`/api/technique-suggestions${qs({ doctor })}`),
 
   listReviewQueue: (params: { status?: string; risk_level?: string; reason?: string } = {}) =>
     request<ReviewQueueItem[]>(`/api/review-queue${qs(params)}`),

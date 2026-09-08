@@ -60,6 +60,87 @@ def _has_any(text: str, needles: list[str]) -> bool:
     return any(n in text for n in needles)
 
 
+# Frases que identificam uma estrutura/achado distinto, usadas por
+# _segment_containing para saber ONDE parar de estender o escopo de uma
+# clausula — ou seja, o sinal de que a virgula seguinte introduziu uma
+# estrutura DIFERENTE, nao apenas mais um qualificador da mesma.
+_KNOWN_STRUCTURE_PHRASES = [
+    "menisco medial", "menisco lateral", "menisco", "meniscal",
+    "ligamento cruzado anterior", "ligamento cruzado posterior",
+    "ligamento colateral medial", "ligamento colateral lateral",
+    "condropatia", "artropatia degenerativa",
+    "fissura condral", "fissuras condrais",
+    "cisto poplíteo", "cisto de baker", "cisto parameniscal", "cisto gangliônico",
+    "edema ósseo", "edema osseo", "edema medular", "edema subcondral",
+    "fratura por insuficiência", "fratura de insuficiência", "fraturas por insuficiência",
+    "tendinopatia", "tendão quadríceps", "tendão do quadríceps", "tendão patelar",
+    "derrame articular", "patela",
+]
+
+
+def _segment_containing(text: str, phrase: str) -> str:
+    """Retorna o(s) segmento(s) (separados por virgula/ponto-e-virgula)
+    relevantes a estrutura identificada por 'phrase', para escopar
+    negacao/severidade aquele trecho em vez da sentenca inteira.
+
+    Bug real (auditoria externa + revisao propria, confirmado no
+    corpus): negacao/severidade eram checadas na sentenca INTEIRA, entao
+    uma clausula sobre OUTRA estrutura contaminava a atual — ex.:
+    'Rotura do ligamento cruzado anterior, sem lesão meniscal.' negava o
+    LCA por causa de 'sem lesão' numa clausula sobre o menisco; 'Menisco
+    medial sem roturas, observando-se lesão do menisco lateral.' negava
+    os dois meniscos por causa de 'sem roturas' dito so sobre o medial.
+
+    Estrategia: comeca no primeiro segmento que contem 'phrase' e
+    ESTENDE para os segmentos seguintes ate encontrar um que mencione
+    outra estrutura conhecida (_KNOWN_STRUCTURE_PHRASES) — assim
+    'ligamento cruzado posterior verticalizado, porém íntegro.'
+    (qualificador da MESMA estrutura, so separado por virgula) continua
+    visivel inteiro, mas uma clausula sobre outra estrutura para de
+    contaminar. Se nenhuma outra estrutura conhecida aparecer no texto,
+    nao ha risco de contaminacao identificavel — devolve o texto
+    inteiro (mais seguro do que arriscar cortar um qualificador da
+    propria estrutura). Heuristica de pontuacao, nao um parser
+    sintatico completo — permanece uma limitacao conhecida para
+    coordenacoes sem virgula."""
+    other_phrases = [p for p in _KNOWN_STRUCTURE_PHRASES
+                      if p != phrase and p not in phrase and phrase not in p]
+    if not any(op in text for op in other_phrases):
+        return text
+    segments = re.split(r"[,;]", text)
+    start = None
+    for i, seg in enumerate(segments):
+        if phrase in seg:
+            start = i
+            break
+    if start is None:
+        return text
+    scoped = [segments[start]]
+    for seg in segments[start + 1:]:
+        if any(op in seg for op in other_phrases):
+            break
+        scoped.append(seg)
+    return ",".join(scoped)
+
+
+def _negated_near(scope: str, trigger_phrase: str) -> bool:
+    """Negacao mais ampla que _NEGATION_CUES, para achados cuja negacao
+    tipica no corpus e simplesmente 'sem <achado>' ou 'sem <filler>
+    <achado>' (ex.: 'sem edema subcondral', 'sem focos de edema
+    ósseo'), sem usar nenhuma das frases compostas de _NEGATION_CUES
+    (que foram curadas para rotura/lesao de menisco e ligamentos, nao
+    para este padrao). Usa fronteira de palavra em 'sem' (para nao
+    confundir com 'sempre') e tolera ate 3 palavras de preenchimento
+    entre 'sem' e o inicio da frase-gatilho."""
+    if _has_any(scope, _NEGATION_CUES):
+        return True
+    idx = scope.find(trigger_phrase)
+    if idx == -1:
+        return False
+    before = scope[:idx]
+    return re.search(r"\bsem\b(\s+\w+){0,3}\s*$", before) is not None
+
+
 def _has_word(text: str, word: str) -> bool:
     """Match com fronteira de palavra — necessario para termos curtos
     que sao prefixo de outra palavra (ex.: 'patela' e prefixo de
@@ -119,60 +200,68 @@ class ConceptExtractionResult:
 
 def _extract_meniscus(text: str) -> list[ClinicalConcept]:
     out = []
-    sides = []
+    structures = []
     if "menisco medial" in text:
-        sides.append("meniscus_medial")
+        structures.append(("meniscus_medial", "menisco medial"))
     if "menisco lateral" in text:
-        sides.append("meniscus_lateral")
-    if not sides and "meniscos" in text:
-        sides = ["meniscus_medial", "meniscus_lateral"]
-    if not sides:
+        structures.append(("meniscus_lateral", "menisco lateral"))
+    if not structures and "meniscos" in text:
+        structures = [("meniscus_medial", "meniscos"), ("meniscus_lateral", "meniscos")]
+    if not structures:
         return out
 
     tear_kw = ["rotura", "lesão", "lesao", "fissura", "ruptura", "amputação"]
     degeneration_kw = ["degeneração", "degeneracao", "degenerativ"]
-    has_tear_kw = _has_any(text, tear_kw)
-    has_degeneration_kw = _has_any(text, degeneration_kw)
-    negated = _has_any(text, _NEGATION_CUES)
-    explicit_normal = _has_any(text, _NORMAL_STATUS_WORDS) or "sem evidências de lesões" in text
-
-    location = None
-    if "corno posterior" in text:
-        location = "posterior_horn"
-    elif "corno anterior" in text:
-        location = "anterior_horn"
-    elif "corpo do menisco" in text or "corpo meniscal" in text:
-        location = "body"
-
-    # tear e degeneracao sao EIXOS INDEPENDENTES — uma estrutura pode
-    # estar degenerada e, ao mesmo tempo, sem rotura (achado real e
-    # frequente: 'Degeneração difusa do menisco lateral, sem roturas.').
-    # Tratar como if/elif (como numa versao anterior) fazia essa frase
-    # composta parecer uma frase 'limpa' de 1 conceito so, o que
-    # confundia o banco de frases do Report Compiler (Fase 6) na hora
-    # de escolher frases reutilizaveis sem conteudo extra nao pedido.
-    degeneration_negated = _has_any(text, [
+    degeneration_negation_kw = [
         "sem degeneração", "sem sinais de degeneração", "sem alterações degenerativas",
-    ])
+    ]
 
-    for structure in sides:
+    # Bug real (auditoria externa, confirmado no corpus): 'Menisco
+    # medial sem roturas, observando-se lesão do menisco lateral.'
+    # marcava OS DOIS meniscos como sem rotura, porque negacao/keyword
+    # eram checados na sentenca inteira em vez de por lado. Cada
+    # estrutura agora usa seu proprio segmento (_segment_containing).
+    for structure, phrase in structures:
+        scope = _segment_containing(text, phrase)
+        has_tear_kw = _has_any(scope, tear_kw)
+        has_degeneration_kw = _has_any(scope, degeneration_kw)
+        negated = _has_any(scope, _NEGATION_CUES)
+        explicit_normal = _has_any(scope, _NORMAL_STATUS_WORDS) or "sem evidências de lesões" in scope
+
+        location = None
+        if "corno posterior" in scope:
+            location = "posterior_horn"
+        elif "corno anterior" in scope:
+            location = "anterior_horn"
+        elif "corpo do menisco" in scope or "corpo meniscal" in scope:
+            location = "body"
+
+        # tear e degeneracao sao EIXOS INDEPENDENTES — uma estrutura pode
+        # estar degenerada e, ao mesmo tempo, sem rotura (achado real e
+        # frequente: 'Degeneração difusa do menisco lateral, sem roturas.').
+        # Tratar como if/elif (como numa versao anterior) fazia essa frase
+        # composta parecer uma frase 'limpa' de 1 conceito so, o que
+        # confundia o banco de frases do Report Compiler (Fase 6) na hora
+        # de escolher frases reutilizaveis sem conteudo extra nao pedido.
+        degeneration_negated = _has_any(scope, degeneration_negation_kw)
+
         if has_tear_kw and negated:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
-                                        _certainty(text), "meniscus_tear_negated",
+                                        _certainty(scope), "meniscus_tear_negated",
                                         location=location))
         elif has_tear_kw and not negated:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "present",
-                                        _certainty(text), "meniscus_tear",
+                                        _certainty(scope), "meniscus_tear",
                                         location=location))
         elif explicit_normal:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
-                                        _certainty(text), "meniscus_explicit_normal",
+                                        _certainty(scope), "meniscus_explicit_normal",
                                         location=location))
 
         if has_degeneration_kw and not degeneration_negated:
             out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
-                                        _certainty(text), "meniscus_degeneration",
-                                        severity=_first_severity(text), location=location))
+                                        _certainty(scope), "meniscus_degeneration",
+                                        severity=_first_severity(scope), location=location))
     return out
 
 
@@ -191,22 +280,31 @@ def _extract_cruciate_ligaments(text: str) -> list[ClinicalConcept]:
         # foi indevidamente marcado como degeneracao=present sem a palavra
         # 'degeneração' aparecer na frase).
         degeneration_kw = ["degeneração", "degeneracao", "degenerativ"]
-        negated = _has_any(text, _NEGATION_CUES)
-        has_rupture = _has_any(text, rupture_kw)
-        has_degeneration = _has_any(text, degeneration_kw)
-        explicit_normal = _has_any(text, _NORMAL_STATUS_WORDS)
+
+        # Bug real (auditoria externa, confirmado no corpus): 'Rotura do
+        # ligamento cruzado anterior, sem lesão meniscal.' marcava o LCA
+        # como AUSENTE, porque 'negated' checava a sentenca inteira e
+        # 'sem lesão' (sobre o menisco, na outra clausula) contaminava o
+        # LCA. Escopar ao segmento que contem a frase da estrutura.
+        scope = _segment_containing(text, phrase)
+        negated = _has_any(scope, _NEGATION_CUES)
+        has_rupture = _has_any(scope, rupture_kw)
+        has_degeneration = _has_any(scope, degeneration_kw)
+        explicit_normal = _has_any(scope, _NORMAL_STATUS_WORDS)
 
         # 'praticamente completa'/'quase completa' NAO e' o mesmo que
         # 'completa' — bug real encontrado em revisao manual (severidade
         # relatada como 'complete' quando o texto qualificava como quase
         # completa). Checa o qualificador de aproximacao ANTES do termo
-        # bruto para nao superestimar a gravidade.
-        near_complete = _has_any(text, ["praticamente completa", "quase completa"])
+        # bruto para nao superestimar a gravidade. Escopado ao segmento
+        # para nao atribuir a severidade do LCP ao LCA quando os dois
+        # aparecem na mesma sentenca com graus diferentes.
+        near_complete = _has_any(scope, ["praticamente completa", "quase completa"])
         if near_complete:
             severity = "near_complete"
-        elif "completa" in text:
+        elif "completa" in scope:
             severity = "complete"
-        elif "parcial" in text:
+        elif "parcial" in scope:
             severity = "partial"
         else:
             severity = None
@@ -216,18 +314,18 @@ def _extract_cruciate_ligaments(text: str) -> list[ClinicalConcept]:
         # roturas' descreve os dois ao mesmo tempo).
         if has_rupture and negated:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
-                                        _certainty(text), f"{structure}_tear_negated"))
+                                        _certainty(scope), f"{structure}_tear_negated"))
         elif has_rupture and not negated:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "present",
-                                        _certainty(text), f"{structure}_tear",
+                                        _certainty(scope), f"{structure}_tear",
                                         severity=severity))
         elif explicit_normal:
             out.append(ClinicalConcept(ORGAN, structure, "tear", "absent",
-                                        _certainty(text), f"{structure}_explicit_normal"))
+                                        _certainty(scope), f"{structure}_explicit_normal"))
 
         if has_degeneration:
             out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
-                                        _certainty(text), f"{structure}_degeneration"))
+                                        _certainty(scope), f"{structure}_degeneration"))
     return out
 
 
@@ -250,24 +348,29 @@ def _extract_collateral_ligaments(text: str) -> list[ClinicalConcept]:
         # o achado real que a frase afirma.
         rupture_kw = ["rotura", "lesão", "lesao"]
         thickening_kw = ["espessamento", "degeneração intersticial", "degeneracao intersticial"]
-        negated = _has_any(text, _NEGATION_CUES)
-        explicit_normal = _has_any(text, _NORMAL_STATUS_WORDS)
-        has_rupture = _has_any(text, rupture_kw)
-        has_thickening = _has_any(text, thickening_kw)
+
+        # Mesmo escopo por segmento aplicado a LCA/LCP e menisco — evita
+        # que a negacao de uma clausula sobre outra estrutura na mesma
+        # sentenca seja atribuida ao ligamento colateral.
+        scope = _segment_containing(text, phrase)
+        negated = _has_any(scope, _NEGATION_CUES)
+        explicit_normal = _has_any(scope, _NORMAL_STATUS_WORDS)
+        has_rupture = _has_any(scope, rupture_kw)
+        has_thickening = _has_any(scope, thickening_kw)
 
         if has_rupture and negated:
             out.append(ClinicalConcept(ORGAN, structure, "injury", "absent",
-                                        _certainty(text), f"{structure}_injury_negated"))
+                                        _certainty(scope), f"{structure}_injury_negated"))
         elif has_rupture and not negated:
             out.append(ClinicalConcept(ORGAN, structure, "injury", "present",
-                                        _certainty(text), f"{structure}_injury"))
+                                        _certainty(scope), f"{structure}_injury"))
         elif explicit_normal and not has_thickening:
             out.append(ClinicalConcept(ORGAN, structure, "injury", "absent",
-                                        _certainty(text), f"{structure}_explicit_normal"))
+                                        _certainty(scope), f"{structure}_explicit_normal"))
 
         if has_thickening:
             out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
-                                        _certainty(text), f"{structure}_degeneration"))
+                                        _certainty(scope), f"{structure}_degeneration"))
     return out
 
 
@@ -366,10 +469,23 @@ _CHONDRAL_FISSURE_KW = ["fissura condral", "fissuras condrais"]
 
 def _extract_chondropathy(text: str) -> list[ClinicalConcept]:
     out = []
-    has_chondropathy_kw = "condropatia" in text or _has_any(text, _CHONDRAL_FISSURE_KW)
+    trigger_kw = ["condropatia"] + _CHONDRAL_FISSURE_KW
+    has_chondropathy_kw = _has_any(text, trigger_kw)
     if not has_chondropathy_kw and "artropatia degenerativa" not in text:
         return out
     finding = "chondropathy" if has_chondropathy_kw else "degenerative_arthropathy"
+
+    # Bug real encontrado no corpus (nao fazia parte da auditoria
+    # original — achado ao revisar esta rodada de correcao): este
+    # extrator nunca checava negacao. 'Não há sinais de condropatia.'
+    # virava 'chondropathy present'. Confirmado em sentencas reais do
+    # corpus ('não há sinais de condropatia significativa...').
+    trigger_phrase = next((kw for kw in trigger_kw if kw in text), "artropatia degenerativa")
+    scope = _segment_containing(text, trigger_phrase)
+    if _negated_near(scope, trigger_phrase):
+        return [ClinicalConcept(ORGAN, "knee_joint", finding, "absent",
+                                 _certainty(scope), f"{finding}_negated")]
+
     grade = _grade(text)
     severity = _first_severity(text)
     matched_locations = _matched_compartments(text)
@@ -418,23 +534,46 @@ def _extract_cysts(text: str) -> list[ClinicalConcept]:
         ("cisto parameniscal", "parameniscal_cyst"),
         ("cisto gangliônico", "ganglion_cyst"),
     ]:
+        if phrase not in text or structure in seen_structures:
+            continue
+        # Checagem de negacao adicionada nesta rodada de correcao (mesma
+        # classe de bug do edema osseo/condropatia abaixo — 0 casos reais
+        # observados no corpus atual, mas o extrator nao tinha nenhuma
+        # protecao contra 'sem cisto poplíteo').
+        scope = _segment_containing(text, phrase)
+        if _negated_near(scope, phrase):
+            seen_structures.add(structure)
+            out.append(ClinicalConcept(ORGAN, structure, "cyst", "absent",
+                                        _certainty(scope), "cyst_negated"))
+            continue
         # 'not in seen_structures' evita duplicar (bug real encontrado
         # em revisao: 'cisto de baker' e 'cisto poplíteo' sao sinonimos
         # e podem coexistir na mesma frase, gerando 2 conceitos identicos).
-        if phrase in text and structure not in seen_structures:
-            seen_structures.add(structure)
-            out.append(ClinicalConcept(ORGAN, structure, "cyst", "present",
-                                        _certainty(text), "cyst",
-                                        severity=_first_severity(text),
-                                        measurement_cm=_measurement_cm(text)))
+        seen_structures.add(structure)
+        out.append(ClinicalConcept(ORGAN, structure, "cyst", "present",
+                                    _certainty(text), "cyst",
+                                    severity=_first_severity(text),
+                                    measurement_cm=_measurement_cm(text)))
     return out
 
 
 def _extract_bone_marrow_edema(text: str) -> list[ClinicalConcept]:
     out = []
-    if not _has_any(text, ["edema ósseo", "edema osseo", "edema medular",
-                            "edema subcondral"]):
+    edema_kw = ["edema ósseo", "edema osseo", "edema medular", "edema subcondral"]
+    trigger_phrase = next((kw for kw in edema_kw if kw in text), None)
+    if trigger_phrase is None:
         return out
+
+    # Bug real encontrado no corpus (nao fazia parte da auditoria
+    # original — achado ao revisar esta rodada de correcao): 228 das 730
+    # sentencas do corpus que mencionam 'edema subcondral' o fazem
+    # negado ('..., sem edema subcondral.'). Este extrator nunca checava
+    # negacao — todas viravam 'bone_marrow_edema present'.
+    scope = _segment_containing(text, trigger_phrase)
+    if _negated_near(scope, trigger_phrase):
+        return [ClinicalConcept(ORGAN, "bone", "bone_marrow_edema", "absent",
+                                 _certainty(scope), "bone_marrow_edema_negated")]
+
     location = None
     for phrase, loc in _COMPARTMENTS:
         if phrase in text:
@@ -452,9 +591,17 @@ def _extract_bone_marrow_edema(text: str) -> list[ClinicalConcept]:
 # (risco de colapso subcondral), nao uma variante de artropatia.
 def _extract_insufficiency_fracture(text: str) -> list[ClinicalConcept]:
     out = []
-    if not _has_any(text, ["fratura por insuficiência", "fratura de insuficiência",
-                            "fraturas por insuficiência"]):
+    fracture_kw = ["fratura por insuficiência", "fratura de insuficiência",
+                   "fraturas por insuficiência"]
+    trigger_phrase = next((kw for kw in fracture_kw if kw in text), None)
+    if trigger_phrase is None:
         return out
+
+    scope = _segment_containing(text, trigger_phrase)
+    if _negated_near(scope, trigger_phrase):
+        return [ClinicalConcept(ORGAN, "bone", "insufficiency_fracture", "absent",
+                                 _certainty(scope), "insufficiency_fracture_negated")]
+
     location = None
     for phrase, loc in _COMPARTMENTS:
         if phrase in text:
@@ -469,14 +616,18 @@ def _extract_tendinopathy(text: str) -> list[ClinicalConcept]:
     out = []
     if "tendinopatia" not in text:
         return out
-    if "quadríceps" in text or "quadriceps" in text or "quadricipital" in text:
+    scope = _segment_containing(text, "tendinopatia")
+    if _negated_near(scope, "tendinopatia"):
+        return [ClinicalConcept(ORGAN, "tendon_unspecified", "tendinopathy", "absent",
+                                 _certainty(scope), "tendinopathy_negated")]
+    if "quadríceps" in scope or "quadriceps" in scope or "quadricipital" in scope:
         structure = "quadriceps_tendon"
-    elif "patelar" in text:
+    elif "patelar" in scope:
         structure = "patellar_tendon"
     else:
         structure = "tendon_unspecified"
     out.append(ClinicalConcept(ORGAN, structure, "tendinopathy", "present",
-                                _certainty(text), "tendinopathy"))
+                                _certainty(scope), "tendinopathy"))
     return out
 
 
