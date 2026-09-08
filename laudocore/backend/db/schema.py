@@ -138,8 +138,94 @@ CREATE INDEX IF NOT EXISTS idx_review_queue_report ON clinical_review_queue(repo
 """
 
 
+# ---- Camada universal (V2) -----------------------------------------
+#
+# Tabelas da Fase 4A/4B globais. Convivem com `clinical_concepts`
+# (extrator do vertical de joelho, que continua alimentando o compilador
+# e a interface da Fase 6 ate ela ser reconstruida sobre esta camada).
+# Nao sao a mesma coisa e nao devem ser unidas por conveniencia: a
+# tabela legada tem vocabulario hand-coded de joelho; esta e' derivada
+# do lexico minerado e cobre os 210 tipos de exame.
+UNIVERSAL_SCHEMA_SQL = """
+DROP TABLE IF EXISTS clinical_lexicon;
+DROP TABLE IF EXISTS clinical_concepts_universal;
+
+CREATE TABLE clinical_lexicon (
+    id INTEGER PRIMARY KEY,
+    term TEXT NOT NULL UNIQUE,
+    term_type TEXT NOT NULL,        -- anatomy|finding|attribute|descriptor|modifier|...
+    method TEXT NOT NULL,           -- corpus_positional|morphological|model_knowledge
+    confidence REAL NOT NULL,
+    frequency INTEGER NOT NULL,
+    n_exam_types INTEGER NOT NULL,
+    top_exam_type TEXT NOT NULL,
+    concentration REAL NOT NULL,
+    p_after_preposition REAL NOT NULL,
+    p_clause_initial REAL NOT NULL,
+    p_after_finding_trigger REAL NOT NULL,
+    domains TEXT NOT NULL,
+    validation_status TEXT NOT NULL DEFAULT 'extraction_candidate',
+    lexicon_version TEXT NOT NULL
+);
+
+CREATE INDEX idx_lexicon_type ON clinical_lexicon(term_type);
+CREATE INDEX idx_lexicon_freq ON clinical_lexicon(frequency);
+
+CREATE TABLE clinical_concepts_universal (
+    id INTEGER PRIMARY KEY,
+    report_id INTEGER NOT NULL REFERENCES reports(id),
+    section_id INTEGER NOT NULL REFERENCES report_sections(id),
+    sentence_id INTEGER NOT NULL REFERENCES sentences(id),
+    modality TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    exam_type TEXT NOT NULL,
+    doctor TEXT NOT NULL,
+    section_type TEXT NOT NULL,
+    structure TEXT,
+    finding TEXT,
+    status TEXT NOT NULL,
+    certainty TEXT NOT NULL,
+    severity TEXT,
+    morphology TEXT,
+    distribution TEXT,
+    grade TEXT,
+    laterality TEXT,
+    laterality_source TEXT,
+    measurements TEXT,
+    measurement_unit TEXT,
+    temporal_status TEXT,
+    comparison_status TEXT,
+    etiologic_qualifier TEXT,
+    postoperative_context TEXT,
+    modifiers TEXT,
+    char_start INTEGER NOT NULL,
+    char_end INTEGER NOT NULL,
+    source_span TEXT NOT NULL,
+    extraction_method TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    engine_version TEXT NOT NULL,
+    lexicon_version TEXT NOT NULL,
+    layer_version TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    validation_status TEXT NOT NULL
+);
+
+CREATE INDEX idx_cu_report ON clinical_concepts_universal(report_id);
+CREATE INDEX idx_cu_exam ON clinical_concepts_universal(exam_type);
+CREATE INDEX idx_cu_structure ON clinical_concepts_universal(structure);
+CREATE INDEX idx_cu_finding ON clinical_concepts_universal(finding);
+CREATE INDEX idx_cu_status ON clinical_concepts_universal(status);
+CREATE INDEX idx_cu_sentence ON clinical_concepts_universal(sentence_id);
+"""
+
+
 def rebuild_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    conn.commit()
+
+
+def rebuild_universal_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(UNIVERSAL_SCHEMA_SQL)
     conn.commit()
 
 
