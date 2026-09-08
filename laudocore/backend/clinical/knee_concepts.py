@@ -177,13 +177,31 @@ def _extract_cruciate_ligaments(text: str) -> list[ClinicalConcept]:
         if phrase not in text:
             continue
         rupture_kw = ["rotura", "lesão", "lesao", "ruptura"]
-        degeneration_kw = ["degeneração", "degeneracao", "degenerativ", "verticalizad"]
+        # 'verticalizad' NAO entra aqui: e um descritor morfologico/posicional,
+        # nao implica degeneracao por si so (bug real encontrado em revisao
+        # manual — 'Ligamento cruzado posterior verticalizado, porém íntegro.'
+        # foi indevidamente marcado como degeneracao=present sem a palavra
+        # 'degeneração' aparecer na frase).
+        degeneration_kw = ["degeneração", "degeneracao", "degenerativ"]
         negated = _has_any(text, _NEGATION_CUES)
         has_rupture = _has_any(text, rupture_kw)
         has_degeneration = _has_any(text, degeneration_kw)
         explicit_normal = _has_any(text, _NORMAL_STATUS_WORDS)
 
-        severity = "complete" if "completa" in text else ("partial" if "parcial" in text else None)
+        # 'praticamente completa'/'quase completa' NAO e' o mesmo que
+        # 'completa' — bug real encontrado em revisao manual (severidade
+        # relatada como 'complete' quando o texto qualificava como quase
+        # completa). Checa o qualificador de aproximacao ANTES do termo
+        # bruto para nao superestimar a gravidade.
+        near_complete = _has_any(text, ["praticamente completa", "quase completa"])
+        if near_complete:
+            severity = "near_complete"
+        elif "completa" in text:
+            severity = "complete"
+        elif "parcial" in text:
+            severity = "partial"
+        else:
+            severity = None
 
         # tear e degeneracao sao eixos independentes (mesmo raciocinio
         # do menisco: 'verticalizado, com degeneração difusa, sem
@@ -213,21 +231,35 @@ def _extract_collateral_ligaments(text: str) -> list[ClinicalConcept]:
     ]:
         if phrase not in text:
             continue
-        injury_kw = ["rotura", "lesão", "lesao", "espessamento", "degeneração intersticial",
-                     "degeneracao intersticial"]
+        # rotura (tear/injury) e espessamento/degeneracao intersticial
+        # (alteracao cronica, sem rotura franca) sao EIXOS INDEPENDENTES
+        # — mesmo bug ja corrigido para menisco e ligamentos cruzados.
+        # Bug real encontrado em revisao manual: 'Degeneração intersticial
+        # das fibras... sem sinais de ruptura.' e 'Espessamento cicatricial
+        # do ligamento colateral medial, sem roturas.' descrevem uma
+        # alteracao CRONICA REAL (presente), mas eram classificadas como
+        # injury=ABSENT so porque a rotura aguda foi negada — suprimindo
+        # o achado real que a frase afirma.
+        rupture_kw = ["rotura", "lesão", "lesao"]
+        thickening_kw = ["espessamento", "degeneração intersticial", "degeneracao intersticial"]
         negated = _has_any(text, _NEGATION_CUES)
         explicit_normal = _has_any(text, _NORMAL_STATUS_WORDS)
-        has_injury = _has_any(text, injury_kw)
+        has_rupture = _has_any(text, rupture_kw)
+        has_thickening = _has_any(text, thickening_kw)
 
-        if has_injury and not negated:
-            out.append(ClinicalConcept(ORGAN, structure, "injury", "present",
-                                        _certainty(text), f"{structure}_injury"))
-        elif has_injury and negated:
+        if has_rupture and negated:
             out.append(ClinicalConcept(ORGAN, structure, "injury", "absent",
                                         _certainty(text), f"{structure}_injury_negated"))
-        elif explicit_normal:
+        elif has_rupture and not negated:
+            out.append(ClinicalConcept(ORGAN, structure, "injury", "present",
+                                        _certainty(text), f"{structure}_injury"))
+        elif explicit_normal and not has_thickening:
             out.append(ClinicalConcept(ORGAN, structure, "injury", "absent",
                                         _certainty(text), f"{structure}_explicit_normal"))
+
+        if has_thickening:
+            out.append(ClinicalConcept(ORGAN, structure, "degeneration", "present",
+                                        _certainty(text), f"{structure}_degeneration"))
     return out
 
 
@@ -276,6 +308,27 @@ _CHONDROPATHY_LOCAL_COMPARTMENT_FALLBACK = [
 ]
 
 
+def _matched_compartments(text: str) -> list[str]:
+    """Locations distintas mencionadas no texto, sem redundancia.
+
+    Bug real encontrado em revisao manual: 'femorotibial' (generico) e
+    substring de 'femorotibial medial'/'femorotibial lateral', entao uma
+    frase que so menciona o compartimento ESPECIFICO tambem disparava,
+    de forma redundante, um segundo conceito 'femorotibial_unspecified'
+    para a MESMA mencao. Corrigido descartando o generico quando o
+    especifico da mesma familia ja foi encontrado (e deduplicando por
+    location resultante, nao por frase, ja que 'femoropatelar' e
+    'patelofemoral' mapeiam para a mesma location e nao devem virar
+    dois conceitos)."""
+    locations: list[str] = []
+    for phrase, location in _COMPARTMENTS:
+        if phrase in text and location not in locations:
+            locations.append(location)
+    if "medial_femorotibial" in locations or "lateral_femorotibial" in locations:
+        locations = [loc for loc in locations if loc != "femorotibial_unspecified"]
+    return locations
+
+
 def _extract_chondropathy(text: str) -> list[ClinicalConcept]:
     out = []
     if "condropatia" not in text and "artropatia degenerativa" not in text:
@@ -283,13 +336,12 @@ def _extract_chondropathy(text: str) -> list[ClinicalConcept]:
     finding = "chondropathy" if "condropatia" in text else "degenerative_arthropathy"
     grade = _grade(text)
     severity = _first_severity(text)
-    matched_any = False
-    for phrase, location in _COMPARTMENTS:
-        if phrase in text:
-            matched_any = True
-            out.append(ClinicalConcept(ORGAN, "knee_joint", finding, "present",
-                                        _certainty(text), f"{finding}_{location}",
-                                        severity=severity, location=location, ))
+    matched_locations = _matched_compartments(text)
+    matched_any = bool(matched_locations)
+    for location in matched_locations:
+        out.append(ClinicalConcept(ORGAN, "knee_joint", finding, "present",
+                                    _certainty(text), f"{finding}_{location}",
+                                    severity=severity, location=location))
     if not matched_any:
         for phrase, location in _CHONDROPATHY_LOCAL_COMPARTMENT_FALLBACK:
             if phrase in text:
@@ -323,16 +375,21 @@ def _extract_effusion(text: str) -> list[ClinicalConcept]:
 
 def _extract_cysts(text: str) -> list[ClinicalConcept]:
     out = []
+    seen_structures = set()
     for phrase, structure in [
         ("cisto poplíteo", "baker_cyst"),
         ("cisto de baker", "baker_cyst"),
         ("cisto parameniscal", "parameniscal_cyst"),
         ("cisto gangliônico", "ganglion_cyst"),
-        ("cisto gangliônico", "ganglion_cyst"),
     ]:
-        if phrase in text:
+        # 'not in seen_structures' evita duplicar (bug real encontrado
+        # em revisao: 'cisto de baker' e 'cisto poplíteo' sao sinonimos
+        # e podem coexistir na mesma frase, gerando 2 conceitos identicos).
+        if phrase in text and structure not in seen_structures:
+            seen_structures.add(structure)
             out.append(ClinicalConcept(ORGAN, structure, "cyst", "present",
                                         _certainty(text), "cyst",
+                                        severity=_first_severity(text),
                                         measurement_cm=_measurement_cm(text)))
     return out
 

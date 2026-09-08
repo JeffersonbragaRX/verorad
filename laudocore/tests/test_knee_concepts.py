@@ -65,6 +65,62 @@ class TestCruciateLigaments(unittest.TestCase):
         self.assertEqual(structures, {"acl", "pcl", "mcl", "lcl"})
         self.assertTrue(all(c.status == "absent" for c in r.concepts))
 
+    def test_verticalized_alone_is_not_treated_as_degeneration(self):
+        """Regressao: 'verticalizado' e um descritor morfologico, nao
+        implica degeneracao por si so. Bug real: 'Ligamento cruzado
+        posterior verticalizado, porém íntegro.' foi indevidamente
+        marcado como degeneracao=present sem a palavra 'degeneração'
+        aparecer na frase."""
+        r = extract_concepts("ligamento cruzado posterior verticalizado, porém íntegro.")
+        findings = {c.finding for c in r.concepts}
+        self.assertNotIn("degeneration", findings)
+        self.assertEqual(_by_structure(r, "pcl")[0].status, "absent")
+
+    def test_verticalized_with_explicit_degeneration_word_still_captured(self):
+        r = extract_concepts("ligamento cruzado posterior verticalizado, com degeneração difusa, sem roturas.")
+        findings = {c.finding for c in r.concepts}
+        self.assertIn("degeneration", findings)
+
+    def test_near_complete_tear_not_overstated_as_complete(self):
+        """Regressao: 'praticamente completa' foi relatado como
+        severity='complete', superestimando a gravidade real descrita
+        no texto."""
+        r = extract_concepts("rotura praticamente completa do ligamento cruzado anterior.")
+        c = _by_structure(r, "acl")[0]
+        self.assertEqual(c.severity, "near_complete")
+
+    def test_genuinely_complete_tear_still_reported_as_complete(self):
+        r = extract_concepts("rotura completa do ligamento cruzado anterior.")
+        c = _by_structure(r, "acl")[0]
+        self.assertEqual(c.severity, "complete")
+
+
+class TestCollateralLigaments(unittest.TestCase):
+    """Regressao: rotura e espessamento/degeneração intersticial são
+    eixos independentes (mesma classe de bug já corrigida em menisco e
+    ligamentos cruzados). Bug real: 'Degeneração intersticial das
+    fibras... sem sinais de ruptura.' e 'Espessamento cicatricial...
+    sem roturas.' eram classificados como injury=ABSENT, suprimindo o
+    achado crônico real que a frase afirma."""
+
+    def test_thickening_without_rupture_yields_degeneration_present(self):
+        r = extract_concepts("espessamento cicatricial do ligamento colateral medial, sem roturas.")
+        findings_by_structure = {(c.structure, c.finding): c.status for c in r.concepts}
+        self.assertEqual(findings_by_structure.get(("mcl", "degeneration")), "present")
+
+    def test_interstitial_degeneration_without_rupture_yields_degeneration_present(self):
+        r = extract_concepts(
+            "degeneração intersticial das fibras proximais do ligamento colateral lateral, sem sinais de ruptura."
+        )
+        findings_by_structure = {(c.structure, c.finding): c.status for c in r.concepts}
+        self.assertEqual(findings_by_structure.get(("lcl", "degeneration")), "present")
+
+    def test_genuine_rupture_still_reported_as_injury_present(self):
+        r = extract_concepts("rotura parcial do ligamento colateral medial.")
+        c = _by_structure(r, "mcl")[0]
+        self.assertEqual(c.finding, "injury")
+        self.assertEqual(c.status, "present")
+
 
 class TestChondropathy(unittest.TestCase):
     def test_grade_extraction_roman(self):
@@ -84,6 +140,19 @@ class TestChondropathy(unittest.TestCase):
         self.assertIsNone(c.location)
         self.assertEqual(c.rule_id, "chondropathy_unspecified_compartment")
 
+    def test_specific_compartment_not_duplicated_as_unspecified(self):
+        """Regressao: 'femorotibial' e substring de 'femorotibial
+        medial', o que gerava um segundo conceito redundante
+        'femorotibial_unspecified' junto do especifico correto."""
+        r = extract_concepts("condropatia femorotibial medial.")
+        locations = [c.location for c in r.concepts]
+        self.assertEqual(locations, ["medial_femorotibial"])
+
+    def test_tricompartmental_and_specific_compartment_can_coexist(self):
+        r = extract_concepts("artropatia degenerativa tricompartimental, predominando no femorotibial medial.")
+        locations = {c.location for c in r.concepts}
+        self.assertEqual(locations, {"tricompartmental", "medial_femorotibial"})
+
 
 class TestEffusion(unittest.TestCase):
     def test_severity_captured(self):
@@ -98,6 +167,19 @@ class TestCyst(unittest.TestCase):
         r = extract_concepts("cisto poplíteo medindo 2,7 cm.")
         c = _by_structure(r, "baker_cyst")[0]
         self.assertEqual(c.measurement_cm, 2.7)
+
+    def test_severity_captured(self):
+        """Regressao: 'Pequeno cisto poplíteo.' nao capturava a
+        gravidade, apesar de estar explicita no texto."""
+        r = extract_concepts("pequeno cisto poplíteo.")
+        c = _by_structure(r, "baker_cyst")[0]
+        self.assertEqual(c.severity, "pequeno")
+
+    def test_repeated_phrase_in_source_list_not_double_counted(self):
+        """Regressao: 'cisto gangliônico' estava listado duas vezes no
+        extrator, gerando 2 conceitos identicos para a mesma mencao."""
+        r = extract_concepts("cisto gangliônico junto à origem da cabeça lateral do gastrocnêmio.")
+        self.assertEqual(len(_by_structure(r, "ganglion_cyst")), 1)
 
 
 class TestPatellaWordBoundaryBug(unittest.TestCase):

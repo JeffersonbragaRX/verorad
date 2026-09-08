@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-08T01:02:11.262837+00:00",
+  "generated_at": "2026-09-08T01:19:11.259450+00:00",
   "note": "Cobertura agregada, sem texto real de sentenca.",
-  "distinct_finding_keys_findings_section": 159,
-  "distinct_finding_keys_impression_section": 139,
-  "present_finding_keys_with_own_impression_phrase": 97,
-  "present_finding_keys_total": 145,
-  "pct_present_findings_with_dedicated_impression_phrase": 66.9,
+  "distinct_finding_keys_findings_section": 163,
+  "distinct_finding_keys_impression_section": 135,
+  "present_finding_keys_with_own_impression_phrase": 96,
+  "present_finding_keys_total": 149,
+  "pct_present_findings_with_dedicated_impression_phrase": 64.4,
   "caveat": "Quando nao ha frase de impressao dedicada para uma combinacao, o compilador reaproveita a frase de achados (ainda real, nunca inventada) — ver ResolvedFinding.exact_match=False nesses casos."
 }

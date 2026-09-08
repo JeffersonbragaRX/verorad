@@ -11,7 +11,41 @@ um produto não relacionado (estimador de idade óssea). Ver
 `docs/decisions/0003-local-do-repositorio.md` para o porquê e como
 migrar para um repositório dedicado se desejado.
 
-## Estado atual: Fase 6 concluída (Report Compiler, vertical piloto)
+## Estado atual: mini-eval de fidelidade textual concluída (Fase 4 + Fase 6)
+
+Amostra estratificada de 86 sentenças reais (2 por regra de extração,
+cobrindo as 43 regras distintas), lida item a item — **por mim
+(Claude), não por um radiologista**: o que foi verificado é fidelidade
+textual (o conceito extraído representa exatamente o que a frase diz),
+não correção clínica plena. Ver `docs/decisions/0007` para a
+metodologia completa e essa distinção.
+
+**4 bugs de precisão real encontrados e corrigidos**, cada um com
+evidência do texto real que os expôs:
+
+1. "Verticalizado" sozinho estava sendo tratado como sinônimo de
+   degeneração (25 ocorrências afetadas no corpus).
+2. "Rotura praticamente completa" era relatada com gravidade "completa"
+   pura, superestimando o achado (17 ocorrências).
+3. Compartimento específico ("femorotibial medial") gerava um segundo
+   conceito redundante e genérico ("femorotibial não especificado")
+   pela mesma menção (12 ocorrências).
+4. Ligamentos colaterais: espessamento/degeneração intersticial real
+   era suprimido sempre que a rotura aguda era negada na mesma frase
+   (mesma classe de bug já corrigida em menisco e cruzados na Fase 6).
+
+Todos com teste de regressão, confirmados corrigidos contra o corpus
+real (74 testes passando, 11 novos). Limitações remanescentes
+(variantes de acentuação/hífen não reconhecidas, faixas de grau
+truncadas, construções coordenadas com elisão) documentadas, não
+corrigidas — são lacunas de recall, informação omitida, não
+informação errada.
+
+```bash
+python3 scripts/extract_concepts.py && python3 scripts/compile_report_demo.py
+```
+
+## Estado anterior: Fase 6 concluída (Report Compiler, vertical piloto)
 
 Compila um laudo a partir de achados que o médico já decidiu
 (`FindingRequest`: estrutura, achado, status, gravidade, localização)
@@ -49,7 +83,7 @@ achados/impressão do vertical — **100% por regras/regex, sem LLM**
 (`backend/clinical/knee_concepts.py`), com `rule_id` rastreável em
 cada conceito.
 
-- 14.798 conceitos extraídos de 18.597 sentenças
+- 14.675 conceitos extraídos de 18.597 sentenças
 - 56,7% das sentenças produzem pelo menos um conceito (cobertura
   aproximada de recall — **não é medida de precisão**, ver ressalva
   abaixo)
@@ -132,12 +166,16 @@ Detalhes completos e limitações identificadas em `docs/BASELINE_REPORT.md`.
 
 ## Próximo passo proposto
 
-**Mini-eval, agora sobre o compilador inteiro**: anotar manualmente
-50-100 combinações de achados (idealmente pelo próprio usuário) e
-comparar o laudo compilado contra o que ele redigiria — mede de uma vez
-a precisão real do Clinical Concept Layer (Fase 4) e da escolha de
-frases do Report Compiler (Fase 6), já que os dois problemas de
-precisão encontrados até agora só apareceram testando o pipeline
-completo, não os componentes isolados. Recomendado nas ADRs 0005 e
-0006 antes de considerar esta camada pronta para uso real, mesmo como
-rascunho assistido.
+A avaliação feita até aqui (Claude lendo sentença por sentença) mede
+fidelidade textual, não correção clínica — esse teto só é superado com
+revisão de um radiologista. Duas opções, não mutuamente exclusivas:
+
+1. **Validação clínica real pelo usuário**: revisar uma amostra dos
+   14.675 conceitos extraídos (ou dos laudos compilados) e apontar
+   onde a estrutura/rótulo não corresponde ao que ele diria como
+   médico — não apenas se bate com o texto, mas se é a forma
+   clinicamente correta de descrever o achado.
+2. **Fase 8 (UI mínima)**: uma tela simples para inserir achados
+   (dropdown de estrutura/achado/gravidade) e ver o laudo compilado em
+   tempo real — torna a validação do item 1 prática de fazer, em vez
+   de exigir ler JSON.
