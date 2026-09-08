@@ -100,10 +100,72 @@ class ApiTestBase(unittest.TestCase):
         cls.tmpdir.cleanup()
 
 
+class TestConnectionCrossThreadSafety(ApiTestBase):
+    """Regressao real encontrada testando a UI manualmente: FastAPI roda
+    dependencias sync em threadpool, e o setup/teardown de uma
+    generator-dependency pode ser despachado em threads diferentes —
+    sqlite3 por padrao proibe isso ('SQLite objects created in a thread
+    can only be used in that same thread'). Sem check_same_thread=False,
+    toda rota da API falhava com 500 nesse cenario."""
+
+    def test_connection_created_in_one_thread_closable_in_another(self):
+        import threading
+        from backend.api.db import get_connection
+
+        conn = get_connection()
+        errors = []
+
+        def close_elsewhere():
+            try:
+                conn.close()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        t = threading.Thread(target=close_elsewhere)
+        t.start()
+        t.join()
+        self.assertEqual(errors, [])
+
+    def test_repeated_requests_succeed_under_fresh_event_loop_dispatch(self):
+        # Reproduz o cenario real que disparou o bug: multiplas
+        # requisicoes sequenciais via TestClient, cada uma abrindo e
+        # fechando sua propria conexao pela dependencia get_db.
+        for _ in range(10):
+            r = self.client.get("/api/reports")
+            self.assertEqual(r.status_code, 200)
+
+
 class TestHealth(ApiTestBase):
     def test_health(self):
         r = self.client.get("/api/health")
         self.assertEqual(r.status_code, 200)
+
+
+_FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+
+
+@unittest.skipUnless(_FRONTEND_DIST.exists(), "frontend/dist ausente — rode 'npm run build' antes")
+class TestSpaFallback(ApiTestBase):
+    """Regressao real encontrada testando o build integrado: uma rota
+    client-side (ex.: /biblioteca/12) nao e um arquivo estatico, entao
+    sem fallback explicito devolvia 404 ao recarregar a pagina — e uma
+    rota /api/* inexistente caia no fallback e devolvia 200 com HTML em
+    vez de 404, escondendo o erro real."""
+
+    def test_root_serves_index_html(self):
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("LaudoCore", r.text)
+
+    def test_client_side_route_falls_back_to_index_html(self):
+        r = self.client.get("/biblioteca/123")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("LaudoCore", r.text)
+
+    def test_unknown_api_route_still_returns_404_not_html(self):
+        r = self.client.get("/api/rota-que-nao-existe")
+        self.assertEqual(r.status_code, 404)
+        self.assertNotIn("<!doctype html>", r.text.lower())
 
 
 class TestReportsEndpoints(ApiTestBase):

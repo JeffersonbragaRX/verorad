@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.routers import reports, concepts, compile as compile_router, review_queue, stats
@@ -50,7 +50,25 @@ def health():
 
 
 if FRONTEND_DIST.exists():
-    # SPA build ja gerado (npm run build) — serve estatico e cai em
-    # index.html para qualquer rota que nao seja /api/*, permitindo
-    # roteamento client-side (ver Fase 8/6).
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    # SPA build ja gerado (npm run build). StaticFiles(html=True) so
+    # serve index.html para a raiz e arquivos que realmente existem —
+    # uma rota client-side como /biblioteca/12 nao e um arquivo, entao
+    # cai em 404 sem o catch-all abaixo (bug real encontrado testando
+    # recarregar a pagina numa rota interna). O catch-all so e atingido
+    # quando nada mais bateu (rotas de API e arquivos estaticos tem
+    # prioridade por serem registrados/montados antes).
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="frontend-assets")
+
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str):
+        # Uma rota /api/* que nao bateu em nenhum router acima e um
+        # endpoint que nao existe — precisa continuar 404, nunca cair
+        # silenciosamente no index.html (bug real: chamada de API
+        # incorreta/removida devolvia 200 com HTML em vez de 404,
+        # escondendo o erro em vez de sinaliza-lo).
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Endpoint não encontrado")
+        candidate = FRONTEND_DIST / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")
