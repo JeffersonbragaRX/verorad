@@ -107,9 +107,10 @@ ocorrências — ver `backend/clinical/knee_concepts.py`):
 
 Este vocabulário orientou o schema de extração de conceitos clínicos
 (estrutura, achado, status, gravidade, localização). Cobertura obtida
-com regras (sem LLM): 56,7% das sentenças produzem pelo menos um
-conceito — ver `docs/decisions/0005-clinical-concept-layer-por-regras.md`
-para o método e as limitações reconhecidas.
+com regras (sem LLM): 58,0% das sentenças produzem pelo menos um
+conceito — ver `docs/decisions/0005-clinical-concept-layer-por-regras.md`,
+`0007-mini-eval-textual-fase4-fase6.md` e `0008-fila-de-revisao-clinica.md`
+para o método, as correções aplicadas e as limitações reconhecidas.
 
 ## Pendência conhecida
 

@@ -153,6 +153,99 @@ class TestChondropathy(unittest.TestCase):
         locations = {c.location for c in r.concepts}
         self.assertEqual(locations, {"tricompartmental", "medial_femorotibial"})
 
+    def test_grade_range_not_truncated_to_lower_bound(self):
+        """Regressao: 'grau I/II' era truncado para severity contendo
+        so 'grade_1', perdendo o limite superior da faixa."""
+        r = extract_concepts("condropatia femorotibial medial grau i/ii.")
+        c = r.concepts[0]
+        self.assertIn("grade_1_2", c.severity)
+
+    def test_grade_range_with_slash_and_higher_numbers(self):
+        r = extract_concepts("condropatia trócleopatelar grau iii/iv.")
+        c = r.concepts[0]
+        self.assertIn("grade_3_4", c.severity)
+
+    def test_single_grade_still_reported_without_range(self):
+        r = extract_concepts("condropatia patelofemoral grau ii.")
+        c = r.concepts[0]
+        self.assertIn("grade_2", c.severity)
+        self.assertNotIn("grade_2_", c.severity)
+
+    def test_hyphenated_accented_tibiofibular_variant_recognized(self):
+        """Regressao: 'tíbio-fibular' (com hifen e acento) nao batia com
+        'tibiofibular' e caia em unspecified_compartment apesar de
+        nomear o compartimento explicitamente."""
+        r = extract_concepts("artropatia degenerativa tíbio-fibular proximal.")
+        c = r.concepts[0]
+        self.assertEqual(c.location, "tibiofibular")
+
+    def test_hyphenated_patellofemoral_variant_recognized(self):
+        r = extract_concepts("artropatia degenerativa patelo-femoral moderada.")
+        c = r.concepts[0]
+        self.assertEqual(c.location, "patellofemoral")
+
+    def test_circumflex_femorotibial_typo_variant_recognized(self):
+        r = extract_concepts("condropatia fêmorotibial medial grau ii.")
+        c = r.concepts[0]
+        self.assertEqual(c.location, "medial_femorotibial")
+
+    def test_nominal_trochlea_femoral_form_recognized(self):
+        r = extract_concepts("condropatia da tróclea femoral grau iv.")
+        c = r.concepts[0]
+        self.assertEqual(c.location, "patellofemoral")
+
+    def test_chondral_fissure_without_condropatia_word_still_captured(self):
+        """Gap de recall real: 'fissuras condrais' descreve o mesmo tipo
+        de achado que 'condropatia' sem usar essa palavra."""
+        r = extract_concepts("fissuras condrais profundas na patela, com edema subcondral.")
+        chondropathy_concepts = [c for c in r.concepts if c.finding == "chondropathy"]
+        self.assertTrue(chondropathy_concepts)
+
+
+class TestInsufficiencyFracture(unittest.TestCase):
+    def test_insufficiency_fracture_captured_alongside_arthropathy(self):
+        """Gap de recall real: a fratura por insuficiência citada na
+        mesma frase de uma artropatia degenerativa nao gerava nenhum
+        conceito proprio."""
+        r = extract_concepts(
+            "artropatia degenerativa tricompartimental com fratura por insuficiência "
+            "nas áreas de carga do côndilo femoral medial."
+        )
+        findings = {c.finding for c in r.concepts}
+        self.assertIn("degenerative_arthropathy", findings)
+        self.assertIn("insufficiency_fracture", findings)
+
+
+class TestElidedCoordination(unittest.TestCase):
+    """Regressao: construcoes coordenadas que elidem o substantivo
+    comum ('ligamento cruzado posterior E colateral lateral preservado')
+    faziam a SEGUNDA estrutura desaparecer por completo da extracao —
+    nao um erro de classificacao, uma estrutura inteira perdida."""
+
+    def test_ligament_coordination_expands_both_structures(self):
+        r = extract_concepts("ligamento cruzado posterior e colateral lateral preservado.")
+        structures = {c.structure for c in r.concepts}
+        self.assertEqual(structures, {"pcl", "lcl"})
+        self.assertTrue(all(c.status == "absent" for c in r.concepts))
+
+    def test_ligament_coordination_other_pair(self):
+        r = extract_concepts("ligamento colateral medial e cruzado anterior íntegros.")
+        structures = {c.structure for c in r.concepts}
+        self.assertEqual(structures, {"mcl", "acl"})
+
+    def test_tendon_coordination_without_do(self):
+        r = extract_concepts("tendão quadríceps e patelar preservados.")
+        structures = {c.structure for c in r.concepts}
+        self.assertEqual(structures, {"quadriceps_tendon", "patellar_tendon"})
+
+    def test_four_way_combined_ligament_phrase_still_works(self):
+        """Garante que a expansao par-a-par nao quebra o padrao de 4
+        ligamentos ja tratado separadamente ('ligamentoS cruzadoS e
+        colateraiS', plural, sem citar estruturas especificas)."""
+        r = extract_concepts("ligamentos cruzados e colaterais íntegros.")
+        structures = {c.structure for c in r.concepts}
+        self.assertEqual(structures, {"acl", "pcl", "mcl", "lcl"})
+
 
 class TestEffusion(unittest.TestCase):
     def test_severity_captured(self):

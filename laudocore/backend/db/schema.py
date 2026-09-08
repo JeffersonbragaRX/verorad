@@ -101,6 +101,40 @@ CREATE INDEX idx_concepts_finding ON clinical_concepts(finding);
 """
 
 
+# Tabela de julgamento humano (fila de revisao clinica). Ao contrario de
+# `clinical_concepts`, esta tabela NAO e recriada do zero a cada
+# execucao de extract_concepts.py — faria uma revisao/anotacao humana
+# ja feita (status='resolved', reviewer_note) desaparecer a cada
+# reprocessamento. Usa chave natural (sentence_id, reason) com UPSERT:
+# conteudo extraido e atualizado, mas status/nota de revisao de um item
+# ja existente sao preservados (ver ensure_review_queue_schema /
+# sync_review_queue em extract_concepts.py). Prevista desde a ADR 0004.
+REVIEW_QUEUE_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS clinical_review_queue (
+    id INTEGER PRIMARY KEY,
+    report_id INTEGER NOT NULL REFERENCES reports(id),
+    sentence_id INTEGER NOT NULL REFERENCES sentences(id),
+    section_type TEXT NOT NULL,
+    doctor TEXT NOT NULL,
+    exam_type TEXT NOT NULL,
+    original_text TEXT NOT NULL,
+    system_output_json TEXT NOT NULL,
+    rule_id TEXT,
+    reason TEXT NOT NULL,
+    risk_level TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewer_note TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    UNIQUE(sentence_id, reason)
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_queue_status ON clinical_review_queue(status);
+CREATE INDEX IF NOT EXISTS idx_review_queue_risk ON clinical_review_queue(risk_level);
+CREATE INDEX IF NOT EXISTS idx_review_queue_report ON clinical_review_queue(report_id);
+"""
+
+
 def rebuild_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     conn.commit()
@@ -108,4 +142,9 @@ def rebuild_schema(conn: sqlite3.Connection) -> None:
 
 def rebuild_concepts_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(CONCEPTS_SCHEMA_SQL)
+    conn.commit()
+
+
+def ensure_review_queue_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(REVIEW_QUEUE_SCHEMA_SQL)
     conn.commit()

@@ -46,7 +46,12 @@ _SEVERITY_ADJECTIVES = {
     "pequen": "pequeno", "mínim": "mínimo", "incipiente": "incipiente",
 }
 _MEASUREMENT_RE = re.compile(r"(\d+(?:[,.]\d+)?)\s*cm\b")
-_GRADE_RE = re.compile(r"grau\s*(i{1,3}v?|iv|[1-4])\b")
+# Captura faixas de grau ('grau I/II', 'grau II/III') alem de grau unico.
+# Bug real encontrado em revisao manual: 'grau I/II' era truncado para
+# apenas 'grade_1', perdendo o limite superior da faixa — informacao
+# clinicamente relevante (grau indeterminado entre I e II nao e o
+# mesmo que grau I puro).
+_GRADE_RE = re.compile(r"grau\s*(i{1,3}v?|iv|[1-4])(?:\s*[/\-]\s*(i{1,3}v?|iv|[1-4]))?\b")
 
 _ROMAN_TO_ARABIC = {"i": "1", "ii": "2", "iii": "3", "iv": "4"}
 
@@ -81,8 +86,11 @@ def _grade(text: str) -> str | None:
     m = _GRADE_RE.search(text)
     if not m:
         return None
-    g = m.group(1)
-    return _ROMAN_TO_ARABIC.get(g, g)
+    g1 = _ROMAN_TO_ARABIC.get(m.group(1), m.group(1))
+    if m.group(2):
+        g2 = _ROMAN_TO_ARABIC.get(m.group(2), m.group(2))
+        return f"{g1}_{g2}"
+    return g1
 
 
 def _certainty(text: str) -> str:
@@ -282,16 +290,34 @@ def _extract_combined_ligaments_normal(text: str) -> list[ClinicalConcept]:
     ]
 
 
+#  Inclui variantes de grafia/acento/hifen REALMENTE observadas no
+#  corpus (nao especuladas): 'tíbio-fibular' (vs 'tibiofibular'),
+#  'patelo-femoral' (vs 'patelofemoral'), 'fêmorotibial' com circunflexo
+#  (provavel erro de digitacao na fonte, mas real) e 'tróclea femoral'
+#  (forma nominal, distinta do adjetivo 'troclear' ja tratado como
+#  fallback local da condropatia). Bug real encontrado em revisao
+#  manual: essas variantes caiam em 'unspecified_compartment' apesar de
+#  nomearem o compartimento explicitamente. A logica de deduplicacao em
+#  _matched_compartments (por LOCATION resultante, nao por frase) ja
+#  cobre essas variantes automaticamente, sem mudanca adicional.
 _COMPARTMENTS = [
     ("tricompartimental", "tricompartmental"),
     ("femoropatelar", "patellofemoral"),
     ("patelofemoral", "patellofemoral"),
+    ("patelo-femoral", "patellofemoral"),
+    ("fêmoro-patelar", "patellofemoral"),
     ("trócleopatelar", "patellofemoral"),
     ("tróclea patelar", "patellofemoral"),
+    ("tróclea femoral", "patellofemoral"),
     ("femorotibial medial", "medial_femorotibial"),
+    ("fêmorotibial medial", "medial_femorotibial"),
     ("femorotibial lateral", "lateral_femorotibial"),
+    ("fêmorotibial lateral", "lateral_femorotibial"),
     ("tibiofibular", "tibiofibular"),
+    ("tíbio-fibular", "tibiofibular"),
+    ("tibio-fibular", "tibiofibular"),
     ("femorotibial", "femorotibial_unspecified"),
+    ("fêmorotibial", "femorotibial_unspecified"),
 ]
 
 
@@ -329,11 +355,21 @@ def _matched_compartments(text: str) -> list[str]:
     return locations
 
 
+#  'fissura(s) condral(is)' descreve o mesmo tipo de achado que
+#  'condropatia' (defeito de cartilagem) sem usar essa palavra — gap de
+#  recall real encontrado em revisao manual ('Fissuras condrais
+#  profundas...' nao gerava nenhum conceito de condropatia). Tratado
+#  como sinonimo de 'condropatia' (nao de 'artropatia degenerativa',
+#  que implica doenca articular mais ampla) para fins de finding.
+_CHONDRAL_FISSURE_KW = ["fissura condral", "fissuras condrais"]
+
+
 def _extract_chondropathy(text: str) -> list[ClinicalConcept]:
     out = []
-    if "condropatia" not in text and "artropatia degenerativa" not in text:
+    has_chondropathy_kw = "condropatia" in text or _has_any(text, _CHONDRAL_FISSURE_KW)
+    if not has_chondropathy_kw and "artropatia degenerativa" not in text:
         return out
-    finding = "chondropathy" if "condropatia" in text else "degenerative_arthropathy"
+    finding = "chondropathy" if has_chondropathy_kw else "degenerative_arthropathy"
     grade = _grade(text)
     severity = _first_severity(text)
     matched_locations = _matched_compartments(text)
@@ -409,6 +445,26 @@ def _extract_bone_marrow_edema(text: str) -> list[ClinicalConcept]:
     return out
 
 
+# Gap de recall real encontrado em revisao manual: 'Artropatia
+# degenerativa tricompartimental com fratura por insuficiência...' so
+# gerava o conceito de artropatia, perdendo a fratura por insuficiencia
+# citada na mesma frase — um achado clinicamente distinto e relevante
+# (risco de colapso subcondral), nao uma variante de artropatia.
+def _extract_insufficiency_fracture(text: str) -> list[ClinicalConcept]:
+    out = []
+    if not _has_any(text, ["fratura por insuficiência", "fratura de insuficiência",
+                            "fraturas por insuficiência"]):
+        return out
+    location = None
+    for phrase, loc in _COMPARTMENTS:
+        if phrase in text:
+            location = loc
+            break
+    out.append(ClinicalConcept(ORGAN, "bone", "insufficiency_fracture", "present",
+                                _certainty(text), "insufficiency_fracture", location=location))
+    return out
+
+
 def _extract_tendinopathy(text: str) -> list[ClinicalConcept]:
     out = []
     if "tendinopatia" not in text:
@@ -439,30 +495,10 @@ _GENERIC_NORMAL_STRUCTURES = [
     ("phrase", "retináculo patelar", "retinaculum"),
 ]
 
-# Construcoes coordenadas ('tendoes do quadriceps e patelar') que se
-# referem a DOIS tendoes em uma unica mencao elidida — sem isso, o
-# match generico so acharia o primeiro (ou nenhum, se 'patelar' sozinho
-# nao bate com a frase completa 'tendao patelar').
-_COORDINATED_TENDON_PATTERNS = [
-    "tendões do quadríceps e patelar",
-    "tendão quadríceps e patelar",
-    "tendões quadríceps e patelar",
-    "tendão do quadríceps e patelar",
-]
-
-
 def _extract_generic_normal(text: str, already_covered: set[str]) -> list[ClinicalConcept]:
     out = []
     if not _has_any(text, _NORMAL_STATUS_WORDS):
         return out
-
-    if _has_any(text, _COORDINATED_TENDON_PATTERNS):
-        for structure in ("quadriceps_tendon", "patellar_tendon"):
-            if structure not in already_covered:
-                out.append(ClinicalConcept(ORGAN, structure, "abnormality", "absent",
-                                            _certainty(text), "generic_explicit_normal_coordinated"))
-        already_covered = already_covered | {"quadriceps_tendon", "patellar_tendon"}
-
     for kind, needle, structure in _GENERIC_NORMAL_STRUCTURES:
         if structure in already_covered:
             continue
@@ -471,6 +507,40 @@ def _extract_generic_normal(text: str, already_covered: set[str]) -> list[Clinic
             out.append(ClinicalConcept(ORGAN, structure, "abnormality", "absent",
                                         _certainty(text), "generic_explicit_normal"))
     return out
+
+
+# ---- expansao de coordenacao com elisao ---------------------------------
+#
+# Bug real encontrado em revisao manual: construcoes como 'ligamento
+# cruzado posterior e colateral lateral preservado.' e 'tendões do
+# quadríceps e patelar preservados.' citam DUAS estruturas, mas a
+# segunda elide o substantivo comum ('ligamento'/'tendão'). Extratores
+# que procuram a frase completa ('ligamento colateral lateral') so
+# encontram a PRIMEIRA estrutura citada, perdendo a segunda por
+# completo — nao e um erro de classificacao, e uma estrutura inteira
+# desaparecendo da extracao.
+#
+# Corrigido de forma GERAL (nao caso a caso): antes de rodar os
+# extratores, reescreve o texto reinserindo o substantivo elidido, para
+# que as duas estruturas fiquem com a frase completa que os extratores
+# ja sabem reconhecer. Isso e normalizacao textual (preserva o
+# significado, so torna a elisao explicita), nao inferencia clinica.
+_COORDINATION_EXPANSIONS = [
+    # 'ligamento cruzado posterior e colateral lateral' -> '... e ligamento colateral lateral'
+    (re.compile(
+        r"\bligamento (cruzado anterior|cruzado posterior|colateral medial|colateral lateral)"
+        r" e (cruzado anterior|cruzado posterior|colateral medial|colateral lateral)\b"
+    ), r"ligamento \1 e ligamento \2"),
+    # 'tendões do quadríceps e patelar' / 'tendão quadríceps e patelar' -> '... e tendão patelar'
+    (re.compile(r"\btend(?:ão|ões)(?: do)? (quadríceps|patelar) e (quadríceps|patelar)\b"),
+     r"tendão \1 e tendão \2"),
+]
+
+
+def _expand_elided_coordination(text: str) -> str:
+    for pattern, replacement in _COORDINATION_EXPANSIONS:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 _EXTRACTORS = [
@@ -483,12 +553,15 @@ _EXTRACTORS = [
     _extract_cysts,
     _extract_bone_marrow_edema,
     _extract_tendinopathy,
+    _extract_insufficiency_fracture,
 ]
 
 
 def extract_concepts(text_normalized: str) -> ConceptExtractionResult:
     """text_normalized: ja em minusculas / espacos colapsados
     (backend.normalization.text_normalization.normalized)."""
+    text_normalized = _expand_elided_coordination(text_normalized)
+
     concepts: list[ClinicalConcept] = []
     for extractor in _EXTRACTORS:
         concepts.extend(extractor(text_normalized))
