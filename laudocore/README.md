@@ -11,7 +11,30 @@ um produto não relacionado (estimador de idade óssea). Ver
 `docs/decisions/0003-local-do-repositorio.md` para o porquê e como
 migrar para um repositório dedicado se desejado.
 
-## Estado atual: Fase 1 concluída (vertical piloto)
+## Estado atual: Fase 4 concluída (Clinical Concept Layer, vertical piloto)
+
+Extração de conceitos clínicos estruturados (estrutura, achado, status,
+gravidade, localização, medida) a partir das sentenças de
+achados/impressão do vertical — **100% por regras/regex, sem LLM**
+(`backend/clinical/knee_concepts.py`), com `rule_id` rastreável em
+cada conceito.
+
+- 13.665 conceitos extraídos de 18.597 sentenças
+- 56,7% das sentenças produzem pelo menos um conceito (cobertura
+  aproximada de recall — **não é medida de precisão**, ver ressalva
+  abaixo)
+- 1 bug real de precisão encontrado e corrigido durante o
+  desenvolvimento (via revisão manual de amostra): confusão entre o
+  osso "patela" e o tendão "patelar" por match de substring
+- **sem gold standard ainda**: não há conjunto de avaliação anotado
+  manualmente para medir precisão real — ver
+  `docs/decisions/0005-clinical-concept-layer-por-regras.md`
+
+```bash
+python3 scripts/extract_concepts.py   # requer ingest_vertical.py já rodado
+```
+
+## Estado anterior: Fase 1 concluída (vertical piloto)
 
 Vertical piloto: **RM de joelho** (`RM_JOELHO_D` + `RM_JOELHO_E`, 911
 laudos, MSK — subespecialidade do usuário). Pipeline completo de
@@ -77,10 +100,17 @@ Nenhuma dependência externa — apenas Python 3 stdlib nesta fase.
 
 Detalhes completos e limitações identificadas em `docs/BASELINE_REPORT.md`.
 
-## Próximo passo proposto (Fase 4, restrita ao vertical piloto)
+## Próximo passo proposto
 
-Clinical Concept Layer apenas para RM de joelho: transformar as
-sentenças já extraídas em achados estruturados (estrutura, lado,
-morfologia, grau, negação) usando um schema específico do joelho —
-ainda sem generalizar para os demais domínios, mantendo a mesma lógica
-de validar em um vertical antes de expandir.
+Duas opções, não mutuamente exclusivas:
+
+1. **Mini-eval do Clinical Concept Layer**: anotar manualmente 50-100
+   sentenças (idealmente pelo próprio usuário) com o conceito
+   "correto" esperado, medir precisão/recall reais contra esse gold
+   standard antes de confiar na camada de conceitos em qualquer uso
+   downstream — recomendado em `docs/decisions/0005`.
+2. **Fase 6 (Report Compiler), restrita ao vertical**: usar os
+   conceitos já extraídos para montar um laudo de RM de joelho a
+   partir de achados fornecidos pelo médico, sem geração livre por
+   LLM ainda — o próximo ponto onde "fidelidade clínica > velocidade"
+   (seção 36 da especificação) passa a ser testável na prática.

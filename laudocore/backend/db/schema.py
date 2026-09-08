@@ -71,7 +71,41 @@ CREATE INDEX idx_sentences_report ON sentences(report_id);
 CREATE INDEX idx_sentences_exact_hash ON sentences(exact_hash);
 """
 
+# Tabela separada (schema/migração proprios) porque e populada por um
+# script diferente (extract_concepts.py, Fase 4) que roda DEPOIS da
+# ingestao e nao deve exigir reingestao completa para ser reexecutado.
+CONCEPTS_SCHEMA_SQL = """
+DROP TABLE IF EXISTS clinical_concepts;
+
+CREATE TABLE clinical_concepts (
+    id INTEGER PRIMARY KEY,
+    report_id INTEGER NOT NULL REFERENCES reports(id),
+    sentence_id INTEGER NOT NULL REFERENCES sentences(id),
+    section_type TEXT NOT NULL,
+    organ TEXT NOT NULL,
+    structure TEXT NOT NULL,
+    finding TEXT NOT NULL,
+    status TEXT NOT NULL,
+    severity TEXT,
+    location TEXT,
+    measurement_cm REAL,
+    certainty TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    doctor TEXT NOT NULL,
+    exam_type TEXT NOT NULL
+);
+
+CREATE INDEX idx_concepts_report ON clinical_concepts(report_id);
+CREATE INDEX idx_concepts_structure ON clinical_concepts(structure);
+CREATE INDEX idx_concepts_finding ON clinical_concepts(finding);
+"""
+
 
 def rebuild_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    conn.commit()
+
+
+def rebuild_concepts_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(CONCEPTS_SCHEMA_SQL)
     conn.commit()

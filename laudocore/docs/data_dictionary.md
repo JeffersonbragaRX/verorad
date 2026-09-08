@@ -83,6 +83,34 @@ mantidos como seção `other` para revisão manual, não classificados por
 adivinhação): `ACHADO ADICIONAL:`, `ACHADOS ADICIONAIS:`,
 `REFERÊNCIA BIBLIOGRÁFICA:`.
 
+## Vocabulário clínico do joelho (Fase 4 — Clinical Concept Layer)
+
+Estruturas com frequência real nas 18.597 sentenças de achados/impressão
+do vertical (contagem de sentenças que mencionam o termo, não de
+ocorrências — ver `backend/clinical/knee_concepts.py`):
+
+| Termo/estrutura | Sentenças | Termo/estrutura | Sentenças |
+|---|---|---|---|
+| patela | 5.088 | corpo do menisco | 329 |
+| derrame articular | 1.276 | platô tibial | 301 |
+| condropatia | 1.198 | tendão quadríceps | 283 |
+| menisco medial | 1.117 | corno anterior | 273 |
+| corno posterior | 1.085 | edema ósseo | 224 |
+| tendinopatia | 921 | ligamento cruzado posterior | 201 |
+| menisco lateral | 851 | plica | 156 |
+| côndilo femoral | 474 | tendão patelar | 108 |
+| ligamento cruzado anterior | 467 | ligamento colateral lateral | 70 |
+| complexo retinacular | 463 | cisto parameniscal | 63 |
+| cisto poplíteo | 461 | pata de ganso | 31 |
+| ligamento colateral medial | 459 | cisto gangliônico | 21 |
+| artropatia degenerativa | 453 | | |
+
+Este vocabulário orientou o schema de extração de conceitos clínicos
+(estrutura, achado, status, gravidade, localização). Cobertura obtida
+com regras (sem LLM): 56,7% das sentenças produzem pelo menos um
+conceito — ver `docs/decisions/0005-clinical-concept-layer-por-regras.md`
+para o método e as limitações reconhecidas.
+
 ## Pendência conhecida
 
 `US` (ultrassonografia) está no escopo do manifest mas sem registros neste

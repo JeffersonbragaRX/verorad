@@ -11,8 +11,11 @@ data/derived/*
 data/derived/qa/*
 !data/derived/qa/QA_REPORT.json
 !data/derived/qa/QA_REPORT_FASE1.json
+!data/derived/qa/QA_REPORT_FASE4.json
 !data/derived/qa/exam_types.csv
 !data/derived/qa/physicians.csv
+# contem texto real de sentenca — nunca commitar (ver ADR 0002)
+data/derived/qa/FASE4_manual_review_sample.json
 
 __pycache__/
 *.pyc
