@@ -39,11 +39,12 @@ from backend.normalization.text_normalization import (  # noqa: E402
 )
 from backend.parsers.section_parser import parse_sections  # noqa: E402
 from backend.parsers.sentence_parser import split_sentences  # noqa: E402
+from backend.db.paths import db_path, derived_dir  # noqa: E402
 from backend.db.schema import rebuild_schema  # noqa: E402
 
 RAW_ROOT = ROOT / "data" / "raw" / "CMS_CORPUS_2026-06-06_A_2026-09-06"
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
-QA_DIR = ROOT / "data" / "derived" / "qa"
+DB_PATH = db_path()
+QA_DIR = derived_dir() / "qa"
 SOURCE_LABEL = "CMS_RADIOLOGY_CORPUS_PRODUCTION_V2_1_1_3MONTHS_FAST_AUDITED"
 
 

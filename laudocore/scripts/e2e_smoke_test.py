@@ -9,7 +9,7 @@ Cada etapa tem uma asserção real (nao e so captura de tela). Screenshots
 vao para --out (padrao: fora do repositorio) porque mostram texto real
 de laudo — nunca commitar essa pasta (ver docs/decisions/0002).
 
-Requer: banco processado (ingest_vertical.py + extract_concepts.py),
+Requer: banco processado (ingest_corpus.py + extract_concepts.py),
 frontend construido (frontend/dist — rode `cd frontend && npm run
 build` antes, ou deixe este script fazer via --build) e o pacote
 `playwright` com o Chromium ja instalado.
@@ -54,7 +54,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not DB_PATH.exists():
-        raise SystemExit(f"{DB_PATH} não existe. Rode ingest_vertical.py e extract_concepts.py antes.")
+        raise SystemExit(f"{DB_PATH} não existe. Rode ingest_corpus.py e extract_concepts.py antes.")
 
     if args.build or not FRONTEND_DIST.exists():
         print("Construindo o frontend…")

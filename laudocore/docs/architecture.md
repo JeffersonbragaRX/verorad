@@ -30,7 +30,7 @@ laudocore/
 │   └── db/schema.py                          (schema SQLite — reports/sections/sentences/clinical_concepts)
 ├── scripts/
 │   ├── baseline_audit.py         (Fase 0)
-│   ├── ingest_vertical.py        (Fase 1: ingestao do vertical piloto, comando unico, idempotente)
+│   ├── ingest_corpus.py          (Fase 1 GLOBAL: ingestao dos 8.402 laudos; --exam-type restringe)
 │   ├── extract_concepts.py       (Fase 4: extracao de conceitos + QA)
 │   └── compile_report_demo.py    (Fase 6: demo do compilador + QA de cobertura)
 └── tests/
@@ -40,7 +40,7 @@ laudocore/
     ├── test_sentence_parser.py
     ├── test_knee_concepts.py
     ├── test_report_compiler.py
-    └── test_ingest_vertical.py   (integracao — requer corpus local, ver skip condicional)
+    └── test_ingest_corpus.py     (integracao — banco temporario, nunca o de producao)
 ```
 
 ## Fase 4 e 6 — dois bugs de precisão que só apareceram testando ponta a ponta

@@ -33,10 +33,11 @@ from backend.clinical.lexicon import mine_lexicon, LEXICON_VERSION  # noqa: E402
 from backend.clinical.concept_layer import (  # noqa: E402
     ConceptExtractor, load_lexicon_from_db, CONCEPT_LAYER_VERSION,
 )
+from backend.db.paths import db_path, derived_dir  # noqa: E402
 from backend.db.schema import rebuild_universal_schema  # noqa: E402
 
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
-DERIVED = ROOT / "data" / "derived"
+DB_PATH = db_path()
+DERIVED = derived_dir()
 QA_DIR = DERIVED / "qa"
 ARTIFACTS = DERIVED / "artifacts"
 

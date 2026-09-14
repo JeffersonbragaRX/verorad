@@ -2,7 +2,7 @@
 """Fase 4 (Clinical Concept Layer) — vertical piloto RM de joelho.
 
 Le as sentencas de achados/impressao ja persistidas pela Fase 1
-(scripts/ingest_vertical.py) e aplica extracao por regras (sem LLM,
+(scripts/ingest_corpus.py) e aplica extracao por regras (sem LLM,
 ver backend/clinical/knee_concepts.py), persistindo em
 clinical_concepts e populando a fila de revisao clinica
 (clinical_review_queue) para casos de ambiguidade genuina (ver
@@ -22,7 +22,7 @@ sao mais ambiguos (ex.: um bug corrigido) sao removidos automaticamente.
 Uso:
     python3 scripts/extract_concepts.py
 
-Pre-requisito: rodar scripts/ingest_vertical.py antes (schema de
+Pre-requisito: rodar scripts/ingest_corpus.py antes (schema de
 sentences precisa existir e estar populado).
 """
 
@@ -41,10 +41,11 @@ sys.path.insert(0, str(ROOT))
 
 from backend.clinical.knee_concepts import extract_concepts  # noqa: E402
 from backend.clinical.review_queue import detect_ambiguities, sync_review_queue  # noqa: E402
+from backend.db.paths import db_path, derived_dir  # noqa: E402
 from backend.db.schema import rebuild_concepts_schema, ensure_review_queue_schema  # noqa: E402
 
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
-QA_DIR = ROOT / "data" / "derived" / "qa"
+DB_PATH = db_path()
+QA_DIR = derived_dir() / "qa"
 
 RELEVANT_SECTION_TYPES = ("findings", "impression")
 
@@ -64,7 +65,7 @@ def _concepts_summary(concepts) -> str:
 def main() -> None:
     if not DB_PATH.exists():
         raise SystemExit(
-            f"{DB_PATH} nao existe. Rode scripts/ingest_vertical.py primeiro."
+            f"{DB_PATH} nao existe. Rode scripts/ingest_corpus.py primeiro."
         )
 
     conn = sqlite3.connect(DB_PATH)

@@ -8,45 +8,80 @@ uma checagem de CI que nao tenha acesso ao dado clinico.
 
 import json
 import sqlite3
+import os
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_ROOT = ROOT / "data" / "raw" / "CMS_CORPUS_2026-06-06_A_2026-09-06"
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
-QA_PATH = ROOT / "data" / "derived" / "qa" / "QA_REPORT_FASE1.json"
-SCRIPT = ROOT / "scripts" / "ingest_vertical.py"
+PROD_QA = ROOT / "data" / "derived" / "qa" / "QA_REPORT_FASE1.json"
+SCRIPT = ROOT / "scripts" / "ingest_corpus.py"
+# Banco TEMPORARIO, nunca o de producao. Bug real corrigido: estes
+# testes rodavam os scripts por subprocess contra data/processed/
+# laudocore.db, reconstruindo o schema e apagando a ingestao global
+# (8.402 laudos viravam os 911 do vertical), alem de deixar
+# clinical_concepts_universal orfao. Ver ADR 0011.
+_TMP_DB = tempfile.mkdtemp(prefix="laudocore_test_")
+
+
+DB_PATH = Path(_TMP_DB) / "laudocore.db"
+QA_PATH = Path(_TMP_DB) / "derived" / "qa" / "QA_REPORT_FASE1.json"
+
+
+def _env_with_temp_db() -> dict:
+    env = dict(os.environ)
+    env["LAUDOCORE_DB"] = str(DB_PATH)
+    return env
+
 
 
 def run_script() -> dict:
-    subprocess.run([sys.executable, str(SCRIPT)], check=True, cwd=ROOT,
+    subprocess.run([sys.executable, str(SCRIPT), "--exam-type",
+                     "RM_JOELHO_D", "RM_JOELHO_E"],
+                    check=True, cwd=ROOT, env=_env_with_temp_db(),
                     capture_output=True, text=True)
     return json.loads(QA_PATH.read_text(encoding="utf-8"))
 
 
 @unittest.skipUnless(RAW_ROOT.exists(), "corpus RAW ausente localmente (ver ADR 0002)")
-class TestIngestVertical(unittest.TestCase):
+class TestIngestCorpusVerticalSubset(unittest.TestCase):
+    """Roda o pipeline global restrito ao vertical, em banco temporario."""
+
     @classmethod
     def setUpClass(cls):
         cls.qa = run_script()
 
     def test_ingests_expected_volume(self):
         # 911 e o numero confirmado na Fase 0 para RM_JOELHO_D + RM_JOELHO_E
-        self.assertEqual(self.qa["totals"]["reports_ingested"], 911)
+        self.assertEqual(self.qa["totals"]["reports"], 911)
+
+    def test_does_not_touch_production_database(self):
+        """Regressao do bug que este arquivo causava: rodar a suite
+        reconstruia o banco de PRODUCAO com os 911 do vertical,
+        destruindo a ingestao global de 8.402 laudos."""
+        self.assertNotEqual(DB_PATH.resolve(),
+                            (ROOT / "data" / "processed" / "laudocore.db").resolve())
+        if PROD_QA.exists():
+            prod = json.loads(PROD_QA.read_text(encoding="utf-8"))
+            self.assertNotEqual(prod["totals"]["reports"], 911,
+                                 "QA de producao foi sobrescrito pelo teste")
 
     def test_every_report_has_technique_and_findings(self):
         # technique e findings sao universais neste vertical (100% nos
         # 4 medicos, ja verificado manualmente); uma regressao aqui
         # indica quebra no parser de secao ou nos dados de entrada.
-        for doctor, cov in self.qa["section_coverage_by_doctor"].items():
+        for doctor, cov in self.qa["coverage_by_doctor"].items():
             self.assertEqual(cov["pct_with_technique"], 100.0, doctor)
             self.assertEqual(cov["pct_with_findings"], 100.0, doctor)
 
     def test_unmatched_headers_stay_low(self):
         # Nao deve crescer sem que alguem revise os novos casos.
-        self.assertLessEqual(self.qa["unmatched_header_total_occurrences"], 10)
+        rx = self.qa["parser_quality"]["reports_with_unmatched_header_by_modality"]
+        for modality, stats in rx.items():
+            self.assertLessEqual(stats["pct"], 10.0, modality)
 
     def test_db_row_counts_consistent(self):
         conn = sqlite3.connect(DB_PATH)
@@ -55,9 +90,9 @@ class TestIngestVertical(unittest.TestCase):
         n_sections = cur.execute("SELECT COUNT(*) FROM report_sections").fetchone()[0]
         n_sentences = cur.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
         conn.close()
-        self.assertEqual(n_reports, self.qa["totals"]["reports_ingested"])
+        self.assertEqual(n_reports, self.qa["totals"]["reports"])
         self.assertGreater(n_sections, n_reports)  # varias secoes por laudo
-        self.assertEqual(n_sentences, self.qa["totals"]["sentences_extracted"])
+        self.assertEqual(n_sentences, self.qa["totals"]["sentences"])
 
     def test_idempotent_across_runs(self):
         first = self.qa

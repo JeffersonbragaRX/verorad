@@ -34,9 +34,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from backend.db.paths import db_path  # noqa: E402
+
 from backend.analysis.stats import association, benjamini_hochberg  # noqa: E402
 
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
+DB_PATH = db_path()
 ARTIFACTS = ROOT / "data" / "derived" / "artifacts"
 
 MIN_REPORTS_FOR_ASSOCIATION = 25   # achado precisa aparecer em N laudos

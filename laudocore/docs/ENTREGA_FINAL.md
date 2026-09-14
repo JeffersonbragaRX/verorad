@@ -124,7 +124,7 @@ repetibilidade; estado da fila de revisão confirmado inalterado
 
 ```bash
 # uma vez (corpus real em data/raw/, fora do git — ver ADR 0002):
-python3 scripts/ingest_vertical.py
+python3 scripts/ingest_corpus.py  # (era ingest_vertical.py, ver ADR 0011)
 python3 scripts/extract_concepts.py
 
 # a cada uso:

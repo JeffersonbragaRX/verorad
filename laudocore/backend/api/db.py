@@ -9,13 +9,15 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "laudocore.db"
+from backend.db.paths import db_path
+
+DB_PATH = db_path()
 
 
 def get_connection() -> sqlite3.Connection:
     if not DB_PATH.exists():
         raise FileNotFoundError(
-            f"{DB_PATH} não existe. Rode scripts/ingest_vertical.py e "
+            f"{DB_PATH} não existe. Rode scripts/ingest_corpus.py e "
             "scripts/extract_concepts.py antes de iniciar a API."
         )
     # check_same_thread=False: FastAPI roda dependencias sync (como esta)

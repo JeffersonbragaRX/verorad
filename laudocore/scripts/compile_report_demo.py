@@ -21,10 +21,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from backend.db.paths import db_path  # noqa: E402
+
 from backend.compiler.phrase_bank import build_phrase_bank  # noqa: E402
 from backend.compiler.report_compiler import FindingRequest, compile_report  # noqa: E402
 
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
+DB_PATH = db_path()
 QA_DIR = ROOT / "data" / "derived" / "qa"
 
 
@@ -83,7 +85,7 @@ def compute_coverage_qa(conn) -> dict:
 
 def main() -> None:
     if not DB_PATH.exists():
-        raise SystemExit(f"{DB_PATH} nao existe. Rode ingest_vertical.py e extract_concepts.py antes.")
+        raise SystemExit(f"{DB_PATH} nao existe. Rode ingest_corpus.py e extract_concepts.py antes.")
 
     conn = sqlite3.connect(DB_PATH)
     bank = build_phrase_bank(conn)

@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-09-08T18:28:20.349979+00:00",
+  "generated_at": "2026-09-14T18:36:17.265774+00:00",
   "vertical": [
     "RM_JOELHO_D",
     "RM_JOELHO_E"
   ],
   "method": "regras/regex, sem LLM (ver backend/clinical/knee_concepts.py)",
   "totals": {
-    "sentences_considered": 18597,
-    "sentences_with_at_least_one_concept": 10777,
-    "coverage_pct_approx_recall": 58.0,
-    "concepts_extracted": 15221
+    "sentences_considered": 18602,
+    "sentences_with_at_least_one_concept": 10778,
+    "coverage_pct_approx_recall": 57.9,
+    "concepts_extracted": 15222
   },
   "caveat": "coverage_pct_approx_recall mede apenas se pelo menos um conceito foi extraido por sentenca — NAO mede precisao (se o conceito extraido esta correto). Ver docs/decisions/0007 para a metodologia de verificacao de fidelidade textual ja aplicada e suas limitacoes.",
   "concepts_by_finding": {
@@ -18,7 +18,7 @@
     "degeneration": 1855,
     "chondropathy": 1750,
     "effusion": 1380,
-    "injury": 1299,
+    "injury": 1300,
     "bone_marrow_edema": 957,
     "tendinopathy": 921,
     "cyst": 545,
@@ -31,7 +31,7 @@
     "joint_space": 1380,
     "meniscus_lateral": 1231,
     "acl": 1115,
-    "mcl": 1026,
+    "mcl": 1027,
     "quadriceps_tendon": 973,
     "bone": 972,
     "patellar_tendon": 872,
@@ -77,7 +77,7 @@
     "degenerative_arthropathy_femorotibial_unspecified": 75,
     "chondropathy_medial_femorotibial": 74,
     "lcl_explicit_normal": 63,
-    "mcl_injury": 45,
+    "mcl_injury": 46,
     "chondropathy_lateral_femorotibial": 40,
     "pcl_degeneration": 38,
     "chondropathy_femorotibial_unspecified": 35,
@@ -95,21 +95,20 @@
     "chondropathy_tibiofibular": 3,
     "cyst_negated": 1
   },
-  "sentences_without_concept_count": 7820,
+  "sentences_without_concept_count": 7824,
   "clinical_review_queue": {
     "note": "Casos de ambiguidade clinica genuina — nao classificados automaticamente por design. Ver fila completa na aplicacao (nao commitada — contem texto real, ver ADR 0002).",
-    "current_items_synced": 161,
-    "pending_total": 161,
+    "current_items_synced": 160,
+    "pending_total": 160,
     "stale_items_auto_removed_this_run": 0,
     "by_reason": {
       "post_surgical_context": 89,
       "hedge_language": 47,
-      "multiple_measurements": 24,
-      "unmatched_header": 1
+      "multiple_measurements": 24
     },
     "by_risk_level": {
       "high": 89,
-      "medium": 48,
+      "medium": 47,
       "low": 24
     }
   }

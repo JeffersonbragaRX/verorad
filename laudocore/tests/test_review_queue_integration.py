@@ -3,19 +3,44 @@ execucoes). Requer o corpus real (ver ADR 0002) — pulado se ausente.
 """
 
 import sqlite3
+import os
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_ROOT = ROOT / "data" / "raw" / "CMS_CORPUS_2026-06-06_A_2026-09-06"
-DB_PATH = ROOT / "data" / "processed" / "laudocore.db"
 SCRIPT = ROOT / "scripts" / "extract_concepts.py"
+INGEST = ROOT / "scripts" / "ingest_corpus.py"
+# Banco TEMPORARIO, nunca o de producao. Bug real corrigido: estes
+# testes rodavam os scripts por subprocess contra data/processed/
+# laudocore.db, reconstruindo o schema e apagando a ingestao global
+# (8.402 laudos viravam os 911 do vertical), alem de deixar
+# clinical_concepts_universal orfao. Ver ADR 0011.
+_TMP_DB = tempfile.mkdtemp(prefix="laudocore_test_")
+
+
+DB_PATH = Path(_TMP_DB) / "laudocore.db"
+
+
+def _env_with_temp_db() -> dict:
+    env = dict(os.environ)
+    env["LAUDOCORE_DB"] = str(DB_PATH)
+    return env
+
 
 
 def run_extraction():
-    subprocess.run([sys.executable, str(SCRIPT)], check=True, cwd=ROOT, capture_output=True, text=True)
+    """Ingere o vertical num banco temporario e extrai sobre ele."""
+    env = _env_with_temp_db()
+    if not DB_PATH.exists():
+        subprocess.run([sys.executable, str(INGEST), "--exam-type",
+                        "RM_JOELHO_D", "RM_JOELHO_E"],
+                       check=True, cwd=ROOT, env=env, capture_output=True, text=True)
+    subprocess.run([sys.executable, str(SCRIPT)], check=True, cwd=ROOT,
+                   env=env, capture_output=True, text=True)
 
 
 @unittest.skipUnless(RAW_ROOT.exists(), "corpus RAW ausente localmente (ver ADR 0002)")
