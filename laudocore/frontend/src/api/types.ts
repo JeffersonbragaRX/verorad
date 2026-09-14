@@ -136,3 +136,123 @@ export interface Stats {
   doctors: string[]
   exam_types: string[]
 }
+
+// ---- Camada de ANALISE (V2, corpus inteiro) -------------------------
+// Espelha backend/api/routers/analysis.py. Os CSVs sao servidos como
+// linhas de string (vem de csv.DictReader), entao os campos numericos
+// chegam como string e sao convertidos no ponto de uso.
+
+export interface AnalysisOverview {
+  reports: number
+  patients: number
+  sentences: number
+  exam_types: number
+  doctors: number
+  domains: number
+  concepts: number
+  lexicon_terms: number
+  by_modality: Record<string, number>
+  by_domain: Record<string, number>
+  by_status: Record<string, number>
+  validation_note: string
+}
+
+export interface CoverageRow {
+  exam_type: string
+  modality: string
+  domain: string
+  anatomy: string
+  reports: string
+  patients: string
+  doctors: string
+  clinical_sentences: string
+  concept_coverage_pct: string
+  concepts: string
+  structure_binding_pct: string
+  laterality_conflicts: string
+  validation_status: string
+  limitations: string
+  next_pending_step: string
+}
+
+export interface AssociationRow {
+  exam_type: string
+  antecedent_concept: string
+  consequent_concept: string
+  support_n: string
+  support_n_without_dedup: string
+  eligible_denominator: string
+  n_patients: string
+  n_doctors: string
+  doctors: string
+  p_b_given_a: string
+  p_b_without_a: string
+  absolute_difference: string
+  prevalence_ratio: string
+  pr_ci_low: string
+  pr_ci_high: string
+  q_value: string
+  mutually_locked_artifact: string
+  single_author_evidence: string
+  interpretation_allowed: string
+}
+
+export interface UniversalConcept {
+  id: number
+  exam_type: string
+  doctor: string
+  section_type: string
+  structure: string | null
+  finding: string | null
+  status: string
+  certainty: string
+  severity: string | null
+  morphology: string | null
+  distribution: string | null
+  grade: string | null
+  laterality: string | null
+  laterality_source: string | null
+  measurements: string | null
+  temporal_status: string | null
+  comparison_status: string | null
+  etiologic_qualifier: string | null
+  postoperative_context: string | null
+  source_span: string
+  rule_id: string
+  confidence: number
+  validation_status: string
+  sentence_text: string
+}
+
+export interface TailRow {
+  term: string
+  frequency: string
+  n_exam_types: string
+  top_exam_type: string
+  p_after_preposition: string
+  priority: string
+  reason_not_modeled: string
+}
+
+export interface PhysicianComparisonRow {
+  doctor: string
+  reports: string
+  exam_types_covered: string
+  concepts_per_report: string
+  pct_with_impression: string
+  pct_negated: string
+  pct_explicit_normality: string
+  pct_hedged: string
+}
+
+export interface PhysicianProfile {
+  reports: number
+  exam_types_covered: number
+  top_findings: [string, number][]
+  top_structures_declared_normal: [string, number][]
+}
+
+export interface PhysiciansPayload {
+  comparison: PhysicianComparisonRow[]
+  profiles: Record<string, PhysicianProfile>
+}

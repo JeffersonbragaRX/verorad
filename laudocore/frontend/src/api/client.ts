@@ -1,6 +1,8 @@
 import type {
   ReportSummary, ReportDetail, TaxonomyOption, PhraseLibraryEntry,
   FindingRequestIn, CompileResponse, ReviewQueueItem, Stats, TechniqueSuggestion,
+  AnalysisOverview, CoverageRow, AssociationRow, UniversalConcept, TailRow,
+  PhysiciansPayload,
 } from './types'
 
 export class ApiError extends Error {
@@ -75,4 +77,34 @@ export const api = {
 
   reopenReviewItem: (id: number) =>
     request<ReviewQueueItem>(`/api/review-queue/${id}/reopen`, { method: 'POST' }),
+
+  // ---- camada de analise (corpus inteiro) ----
+  analysisOverview: () => request<AnalysisOverview>('/api/analysis/overview'),
+
+  analysisCoverage: (params: { status?: string; modality?: string; search?: string } = {}) =>
+    request<CoverageRow[]>(`/api/analysis/coverage${qs({ ...params, limit: 400 })}`),
+
+  analysisAssociations: (params: {
+    exam_type?: string; min_effect?: number; max_q?: number
+    exclude_artifacts?: boolean; min_doctors?: number; limit?: number
+  } = {}) =>
+    request<AssociationRow[]>(`/api/analysis/associations${qs({
+      ...params,
+      exclude_artifacts: params.exclude_artifacts === undefined
+        ? undefined : String(params.exclude_artifacts),
+    })}`),
+
+  analysisConcepts: (params: {
+    exam_type?: string; finding?: string; status?: string
+    laterality_conflict?: boolean; limit?: number
+  } = {}) =>
+    request<UniversalConcept[]>(`/api/analysis/concepts${qs({
+      ...params,
+      laterality_conflict: params.laterality_conflict ? 'true' : undefined,
+    })}`),
+
+  analysisUnmodeledTail: (priority?: string) =>
+    request<TailRow[]>(`/api/analysis/unmodeled-tail${qs({ priority, limit: 300 })}`),
+
+  analysisPhysicians: () => request<PhysiciansPayload>('/api/analysis/physicians'),
 }

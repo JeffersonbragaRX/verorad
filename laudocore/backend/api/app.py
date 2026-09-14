@@ -18,7 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api.routers import reports, concepts, compile as compile_router, review_queue, stats
+from backend.api.routers import (
+    reports, concepts, compile as compile_router, review_queue, stats, analysis,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = ROOT / "frontend" / "dist"
@@ -37,6 +39,7 @@ app.include_router(concepts.router)
 app.include_router(compile_router.router)
 app.include_router(review_queue.router)
 app.include_router(stats.router)
+app.include_router(analysis.router)
 
 
 @app.exception_handler(FileNotFoundError)
