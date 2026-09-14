@@ -11,6 +11,17 @@ from __future__ import annotations
 import sqlite3
 
 SCHEMA_SQL = """
+-- Tabelas DERIVADAS caem junto com as tabelas-base.
+--
+-- Bug real (ADR 0011): reports/sentences usam id autoincremental, e uma
+-- reingestao reatribui esses ids. As tabelas derivadas sobreviviam
+-- apontando para as linhas ERRADAS — depois da ingestao global, 12.946
+-- dos 15.222 conceitos do vertical de joelho referenciavam exames que
+-- nao eram de joelho, em silencio. Derivado e' regeneravel: cai junto e
+-- e' reconstruido pelos scripts, em vez de ficar consistente por sorte.
+DROP TABLE IF EXISTS clinical_concepts_universal;
+DROP TABLE IF EXISTS clinical_lexicon;
+DROP TABLE IF EXISTS clinical_concepts;
 DROP TABLE IF EXISTS sentences;
 DROP TABLE IF EXISTS report_sections;
 DROP TABLE IF EXISTS reports;

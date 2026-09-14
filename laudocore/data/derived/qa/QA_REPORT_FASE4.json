@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-14T18:36:17.265774+00:00",
+  "generated_at": "2026-09-14T18:42:46.122781+00:00",
   "vertical": [
     "RM_JOELHO_D",
     "RM_JOELHO_E"
@@ -100,7 +100,7 @@
     "note": "Casos de ambiguidade clinica genuina — nao classificados automaticamente por design. Ver fila completa na aplicacao (nao commitada — contem texto real, ver ADR 0002).",
     "current_items_synced": 160,
     "pending_total": 160,
-    "stale_items_auto_removed_this_run": 0,
+    "stale_items_auto_removed_this_run": 679,
     "by_reason": {
       "post_surgical_context": 89,
       "hedge_language": 47,

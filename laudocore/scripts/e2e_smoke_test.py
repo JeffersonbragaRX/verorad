@@ -94,13 +94,16 @@ def run_flow(out_dir: Path) -> None:
         browser = p.chromium.launch(**launch_kwargs)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
 
-        # 1. Dashboard
+        # 1. Visao geral (substituiu o Dashboard do piloto na rota raiz
+        #    quando a camada de analise global foi adicionada — ver ADR 0011)
         page.goto(BASE_URL, wait_until="networkidle")
-        page.wait_for_selector("text=Laudos no vertical")
-        reports_total = page.locator("text=Laudos no vertical").locator("..").locator("p").nth(1).inner_text()
-        assert int(reports_total.replace(".", "")) > 0, "Dashboard não mostrou contagem real de laudos"
-        page.screenshot(path=str(out_dir / "01_dashboard.png"))
-        print("[ok] Dashboard mostra dados reais:", reports_total, "laudos")
+        page.wait_for_selector("main >> text=Visão geral do corpus")
+        # escopo em 'main': a barra lateral tambem contem a palavra 'laudos'
+        reports_total = page.locator(
+            "main p", has_text="Laudos").first.locator("..").locator("p").nth(1).inner_text()
+        assert int(reports_total.replace(".", "")) > 0, "Visao geral nao mostrou contagem real de laudos"
+        page.screenshot(path=str(out_dir / "01_visao_geral.png"))
+        print("[ok] Visao geral mostra dados reais:", reports_total, "laudos")
 
         # 2. Biblioteca — busca e detalhe
         page.goto(f"{BASE_URL}/biblioteca", wait_until="networkidle")

@@ -122,6 +122,49 @@ QueueRowValues = tuple  # (report_id, sentence_id, section_type, doctor, exam_ty
 #                          original_text, system_output_json, rule_id, reason, risk_level)
 
 
+def repair_stale_references(cur: sqlite3.Cursor) -> dict:
+    """Re-resolve itens cujo sentence_id deixou de apontar para a
+    sentenca de origem.
+
+    Bug real (ADR 0011): reports/sentences usam id autoincremental e uma
+    reingestao os reatribui. As tabelas derivadas de conceito agora caem
+    junto com as tabelas-base, mas esta NAO pode cair — guarda decisao
+    humana. Entao ela precisa se reancorar: o texto original esta
+    guardado na propria linha, e e' por ele que a sentenca e'
+    reencontrada.
+
+    Item que nao encontra mais sua sentenca vira status 'stale_reference'
+    em vez de ser apagado (a decisao humana continua valendo; o que se
+    perdeu foi a ancora) ou de continuar apontando para a linha errada."""
+    rows = cur.execute(
+        "SELECT id, sentence_id, original_text FROM clinical_review_queue"
+    ).fetchall()
+    repaired = stale = ok = 0
+    for item_id, sentence_id, original_text in rows:
+        current = cur.execute(
+            "SELECT text_raw FROM sentences WHERE id = ?", (sentence_id,)
+        ).fetchone()
+        if current and current[0] == original_text:
+            ok += 1
+            continue
+        match = cur.execute(
+            "SELECT id FROM sentences WHERE text_raw = ? LIMIT 1", (original_text,)
+        ).fetchone()
+        if match:
+            cur.execute(
+                "UPDATE clinical_review_queue SET sentence_id = ? WHERE id = ?",
+                (match[0], item_id),
+            )
+            repaired += 1
+        else:
+            cur.execute(
+                "UPDATE clinical_review_queue SET status = 'stale_reference' WHERE id = ?",
+                (item_id,),
+            )
+            stale += 1
+    return {"ok": ok, "repaired": repaired, "stale": stale}
+
+
 def sync_review_queue(
     cur: sqlite3.Cursor, current_rows: list[tuple[QueueRowKey, QueueRowValues]],
 ) -> tuple[int, int]:

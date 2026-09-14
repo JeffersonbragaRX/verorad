@@ -40,13 +40,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.clinical.knee_concepts import extract_concepts  # noqa: E402
-from backend.clinical.review_queue import detect_ambiguities, sync_review_queue  # noqa: E402
+from backend.clinical.review_queue import repair_stale_references, detect_ambiguities, sync_review_queue  # noqa: E402
 from backend.db.paths import db_path, derived_dir  # noqa: E402
 from backend.db.schema import rebuild_concepts_schema, ensure_review_queue_schema  # noqa: E402
 
 DB_PATH = db_path()
 QA_DIR = derived_dir() / "qa"
 
+VERTICAL_EXAM_TYPES = ("RM_JOELHO_D", "RM_JOELHO_E")
 RELEVANT_SECTION_TYPES = ("findings", "impression")
 
 
@@ -73,15 +74,22 @@ def main() -> None:
     ensure_review_queue_schema(conn)
     cur = conn.cursor()
 
+    # ESCOPO OBRIGATORIO: este e' o extrator do vertical de JOELHO, com
+    # vocabulario hand-coded de joelho. Antes da ingestao global o banco
+    # so tinha joelho e o filtro era redundante; agora ele tem 210 tipos
+    # de exame, e sem o filtro estas regras rodariam sobre torax, cranio
+    # e abdome, produzindo conceito de menisco onde nao existe menisco.
+    # A cobertura global e' da camada universal (mine_clinical_layer.py).
     sentences = cur.execute(
         f"""
         SELECT s.id, s.report_id, s.text_raw, s.text_normalized, s.doctor, s.exam_type, rs.section_type
         FROM sentences s
         JOIN report_sections rs ON s.section_id = rs.id
         WHERE rs.section_type IN ({",".join("?" for _ in RELEVANT_SECTION_TYPES)})
+          AND s.exam_type IN ({",".join("?" for _ in VERTICAL_EXAM_TYPES)})
         ORDER BY s.id
         """,
-        RELEVANT_SECTION_TYPES,
+        (*RELEVANT_SECTION_TYPES, *VERTICAL_EXAM_TYPES),
     ).fetchall()
 
     total_sentences = len(sentences)
@@ -130,7 +138,9 @@ def main() -> None:
         SELECT rs.id, rs.report_id, rs.header_line, rs.text_raw, r.doctor, r.exam_type
         FROM report_sections rs JOIN reports r ON rs.report_id = r.id
         WHERE rs.unmatched_header = 1
-        """
+          AND r.exam_type IN (?, ?)
+        """,
+        VERTICAL_EXAM_TYPES,
     ).fetchall()
     for section_id, report_id, header_line, section_text_raw, doctor, exam_type in unmatched_sections:
         anchor = cur.execute(
